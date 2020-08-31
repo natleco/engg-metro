@@ -27,6 +27,6 @@ Explanations for directories and their containing files are detailed below:
 
 ---
 <br>
-<div style="text-align: center;">
+<div align="center">
     <img src="https://github.com/natleco/engg-metro/raw/master/assets/system-concept-diagram.png" alt="System Concept Diagram" width="750px">
 </div>
