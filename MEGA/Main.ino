@@ -55,7 +55,21 @@ State state();
       /*
         Send test command over comms and check that response is correct
       */
-      void calibrate() {
+bool calibrate() {
+
+        //this is sending the request over comms
+        Serial.print("C:1")
+        //delaying, to wait for a response 
+        delay(100);
+
+        //checking is response is available now
+        if(Serial.available() && Serial.availableForWrite()){
+          if(Serial.read == ""){
+            return true;
+          }
+        }
+        return false;
+        
         // Send a test request over comms and await a response over comms
       }
 
