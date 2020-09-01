@@ -43,24 +43,38 @@ State state();
 
 #if ENABLE_COMMS
   class Comms {
+    private: 
+      int baudRate = 9600;
+
     public:
       Comms() {
-        // Use ::state to access the state class in this scope
+        Serial.begin(baudRate);
+        Serial1.begin(baudRate);
       }
 
       /*
         Send test command over comms and check that response is correct
       */
       void calibrate() {
-        
+        // Send a test request over comms and await a response over comms
       }
 
       /*
         Data is sent in this format: 
           < status code (0-9) >:< data type (a, d, s) >_< data >
       */
-      void sendCommand() {
-
+      bool sendCommand(char type, int data) {
+        if (type && data) {
+          char message[10] = (::state.status + ":" + type + "_" + data);
+          Serial.write("<");
+          delay(100);
+          Serial.write(message);
+          delay(100);
+          Serial.write(">");
+          return true;
+        } else {
+          return false;
+        }
       }
 
       /*
@@ -132,8 +146,8 @@ Sensors sensors();
 
 void setup() {
   #if DEBUG
-    Serial.begin(9600);
-    Serial.print("Entered DEBUG mode\n");
+    Serial1.begin(9600);
+    Serial1.print("Entered DEBUG mode\n");
   #endif
 }
 
