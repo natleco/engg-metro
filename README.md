@@ -15,6 +15,8 @@ Explanations for directories and their containing files are detailed below:
 │   ├── c_cpp_properties        # Config file for the C/C++ extension in VSCode
 │   └── launch.json             # Config file for running '.ino' files in VSCode
 │
+├── assets                      # Images used for README
+│
 ├── MEGA                        # State Machine / Motors / Sensors / Comms-Receiver code-base
 │   ├── MainTrain_Testing.ino   # Code for Arduino MEGA (for testing)
 │   └── MainTrain.ino           # Code for Arduino MEGA (for production)
