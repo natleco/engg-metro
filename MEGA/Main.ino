@@ -47,15 +47,18 @@ State state();
       int baudRate = 9600;
 
     public:
+      char command;
       Comms() {
         Serial.begin(baudRate);
         Serial1.begin(baudRate);
+        
+
       }
 
       /*
         Send test command over comms and check that response is correct
       */
-bool calibrate() {
+      bool calibrate() {
 
         //this is sending the request over comms
         Serial.print("C:1")
@@ -64,6 +67,7 @@ bool calibrate() {
 
         //checking is response is available now
         if(Serial.available() && Serial.availableForWrite()){
+          //checking the response
           if(Serial.read == ""){
             return true;
           }
@@ -80,11 +84,11 @@ bool calibrate() {
       bool sendCommand(char type, int data) {
         if (type && data) {
           char message[10] = (::state.status + ":" + type + "_" + data);
-          Serial.write("<");
+          Serial.print("<");
           delay(100);
-          Serial.write(message);
+          Serial.print(message);
           delay(100);
-          Serial.write(">");
+          Serial.print(">");
           return true;
         } else {
           return false;
@@ -99,7 +103,23 @@ bool calibrate() {
           c = Change train direction
           d = Open/close doors
       */
-      void receivedCommand() {
+      char receivedCommand() {
+
+        while(Serial.available()){
+          //assuming it is in the structure: "<" + command ">"
+          //command: any of the ones specified in the beginning: x, g, s, c or d
+
+          if(Serial.read()!="<" && Serial.read()!=">"){
+            //this is the command received
+            command = Serial.read();
+          }
+        //this is the end of the command
+          if(Serial.read()==">"){
+            break;
+          }
+        }
+
+        return command;
 
       }
   }
@@ -167,4 +187,27 @@ void setup() {
 
 void loop() {
 
+  switch(receiveCommand()){
+    
+    case 'x':
+
+      break;
+    
+    case 'g':
+
+      break;
+    
+    case 's':
+
+      break;
+    
+    case 'c':
+
+      break;
+    
+    case 'd':
+
+      break;
+
+  }
 }
