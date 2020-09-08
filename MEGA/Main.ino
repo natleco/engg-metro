@@ -9,6 +9,7 @@
 #define ENABLE_MOTORS 1
 #define ENABLE_COMMS 1
 #define ENABLE_DOORS 1
+#define BAUD_RATE 9600
 
 class State {
   public:
@@ -44,14 +45,13 @@ State state();
 #if ENABLE_COMMS
   class Comms {
     private: 
-      int baudRate = 9600;
+     
+      char command;
 
     public:
-      char command;
+      
       Comms() {
-        Serial.begin(baudRate);
-        Serial1.begin(baudRate);
-        
+        Serial.begin(BAUD_RATE);
 
       }
 
@@ -68,7 +68,7 @@ State state();
         //checking is response is available now
         if(Serial.available() && Serial.availableForWrite()){
           //checking the response
-          if(Serial.read == ""){
+          if(Serial.read == "b"){
             return true;
           }
         }
