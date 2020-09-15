@@ -9,6 +9,7 @@
 #define ENABLE_MOTORS 1
 #define ENABLE_COMMS 1
 #define ENABLE_DOORS 1
+#define BAUD_RATE 9600
 
 class State {
   public:
@@ -44,18 +45,35 @@ State state();
 #if ENABLE_COMMS
   class Comms {
     private: 
-      int baudRate = 9600;
+     
+      char command;
 
     public:
+      
       Comms() {
-        Serial.begin(baudRate);
-        Serial1.begin(baudRate);
+        Serial.begin(BAUD_RATE);
+
       }
 
       /*
         Send test command over comms and check that response is correct
       */
-      void calibrate() {
+      bool calibrate() {
+
+        //this is sending the request over comms
+        Serial.print("C:1")
+        //delaying, to wait for a response 
+        delay(100);
+
+        //checking is response is available now
+        if(Serial.available() && Serial.availableForWrite()){
+          //checking the response
+          if(Serial.read == "b"){
+            return true;
+          }
+        }
+        return false;
+        
         // Send a test request over comms and await a response over comms
       }
 
@@ -66,11 +84,11 @@ State state();
       bool sendCommand(char type, int data) {
         if (type && data) {
           char message[10] = (::state.status + ":" + type + "_" + data);
-          Serial.write("<");
+          Serial.print("<");
           delay(100);
-          Serial.write(message);
+          Serial.print(message);
           delay(100);
-          Serial.write(">");
+          Serial.print(">");
           return true;
         } else {
           return false;
@@ -85,7 +103,23 @@ State state();
           c = Change train direction
           d = Open/close doors
       */
-      void receivedCommand() {
+      char receivedCommand() {
+
+        while(Serial.available()){
+          //assuming it is in the structure: "<" + command ">"
+          //command: any of the ones specified in the beginning: x, g, s, c or d
+
+          if(Serial.read()!="<" && Serial.read()!=">"){
+            //this is the command received
+            command = Serial.read();
+          }
+        //this is the end of the command
+          if(Serial.read()==">"){
+            break;
+          }
+        }
+
+        return command;
 
       }
   }
@@ -153,4 +187,27 @@ void setup() {
 
 void loop() {
 
+  switch(receiveCommand()){
+    
+    case 'x':
+
+      break;
+    
+    case 'g':
+
+      break;
+    
+    case 's':
+
+      break;
+    
+    case 'c':
+
+      break;
+    
+    case 'd':
+
+      break;
+
+  }
 }
