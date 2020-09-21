@@ -217,27 +217,27 @@ State state();
 
     // Reads the colour intensity of every primary colour from the sensed object
     void readColours() {
-	    /* Sensing Red Colour  */
+      /* Sensing Red Colour  */
       digitalWrite(RGB_S2,LOW);
       digitalWrite(RGB_S3,LOW);
       redFrequency = pulseIn(RGB_COLOUROUT,LOW);
       redColour = map(redFrequency , redMin, redMax,255,0);
       delay(100);
 
-	    /* Sensing Green Colour */
+      /* Sensing Green Colour */
       digitalWrite(RGB_S2,HIGH);
       digitalWrite(RGB_S3,HIGH);
       greenFrequency = pulseIn(RGB_COLOUROUT,LOW);
       greenColour = map(greenFrequency , greenMin, greenMax,255,0);
       delay(100);
 
-	    /* Sensing Blue Colour */
+      /* Sensing Blue Colour */
       digitalWrite(RGB_S2,LOW);
       digitalWrite(RGB_S3,HIGH);
       blueFrequency = pulseIn(RGB_COLOUROUT,LOW);
       blueColour = map(blueFrequency , blueMin, blueMax,255,0);
       delay(100);     
-	  }
+    }
 
     /*Finalising the Colour and returns the colour as a char 
       Colour Codes 
