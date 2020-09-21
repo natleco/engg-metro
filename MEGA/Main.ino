@@ -201,21 +201,158 @@ State state;
 #endif
 
 #if ENABLE_SENSORS
+#define RGB_COLOUROUT 8
+#define RGB_S2 7
+#define RGB_S3 6
+#define RGB_S1 5 
+#define RGB_S0 4
+
+
   class Sensors {
+    /* Sensor Type : RGB sensors 
+       Sensor Model : XC3708 
+       Number of sensors : 1 */
+
     public:
+      // Reads the Frequency of the respective colours 
+      int redFrequency =0;
+      int greenFrequency =0;
+      int blueFrequency =0;
+
+      // The final colour
+      char colour;
+
+      /* Amount of primary colour detection from the sensed object*/
+      int redColour;
+      int greenColour;
+      int blueColour;
+      
+      /* Minimum and Maximum values for calibration */
+      int redMin;
+      int redMax;
+      int greenMin;
+      int greenMax;
+      int blueMin;
+      int blueMax;
+    
       Sensors() {
-        // Use ::state to access the state class in this scope
+        /* Use ::state to access the state class in this scope */
+        pinMode(RGB_S0, OUTPUT);
+        pinMode(RGB_S1, OUTPUT);
+        pinMode(RGB_S2,OUTPUT);
+        pinMode(RGB_S3,OUTPUT);
+        pinMode(13,OUTPUT); // Tested for UNO
+        pinMode(RGB_COLOUROUT,INPUT);
       }
 
-      /*
-        Check color sensors sense correct colors, and other stuff
-      */
-      void calibrate() {
-        
+    // Calibrating function
+    void calibrate(){
+      /* Aiming at WHITE colour */
+      Serial.println("Sensors Calibrating - Min range...");
+      Serial.println(" Sensed colour : White");
+
+      /*setting calibration values - Min range: */
+      digitalWrite(13, HIGH);
+      delay(2000);
+      digitalWrite(RGB_S2, LOW);
+      digitalWrite(RGB_S3, LOW);
+      redMin = pulseIn(RGB_COLOUROUT, LOW);
+      delay(100);
+
+      digitalWrite(RGB_S2, HIGH);
+      digitalWrite(RGB_S3, HIGH);
+      greenMin = pulseIn(RGB_COLOUROUT, LOW);
+      delay(100);
+
+      digitalWrite(RGB_S2, LOW);
+      digitalWrite(RGB_S3, HIGH);
+      blueMin = pulseIn(RGB_COLOUROUT, LOW);
+      delay(100);
+
+      /*Aiming at BLACK colour */
+      Serial.println("next...");
+      Serial.println("Sensors Calibrating - Max range...");
+      digitalWrite(13, LOW);
+      delay(2000);
+      Serial.println("Black");
+
+      /* setting calibration values- Max range: */
+      digitalWrite(13, LOW);
+      delay(2000);
+      digitalWrite(RGB_S2, LOW);
+      digitalWrite(RGB_S3, LOW);
+      redMax = pulseIn(RGB_COLOUROUT, LOW);
+      delay(100);
+      digitalWrite(RGB_S2, HIGH);
+      digitalWrite(RGB_S3, HIGH);
+      greenMax = pulseIn(RGB_COLOUROUT, LOW);
+      delay(100);
+      digitalWrite(RGB_S2, LOW);
+      digitalWrite(RGB_S3, HIGH);
+      blueMax = pulseIn(RGB_COLOUROUT, LOW);
+      delay(100);
+      Serial.println("Calibration Complete ");
+      digitalWrite(13, LOW);
+    }
+
+    // Reads the colour intensity of every primary colour from the sensed object
+    void readColours() {
+      /* Sensing Red Colour  */
+      digitalWrite(RGB_S2,LOW);
+      digitalWrite(RGB_S3,LOW);
+      redFrequency = pulseIn(RGB_COLOUROUT,LOW);
+      redColour = map(redFrequency , redMin, redMax,255,0);
+      delay(100);
+
+      /* Sensing Green Colour */
+      digitalWrite(RGB_S2,HIGH);
+      digitalWrite(RGB_S3,HIGH);
+      greenFrequency = pulseIn(RGB_COLOUROUT,LOW);
+      greenColour = map(greenFrequency , greenMin, greenMax,255,0);
+      delay(100);
+
+      /* Sensing Blue Colour */
+      digitalWrite(RGB_S2,LOW);
+      digitalWrite(RGB_S3,HIGH);
+      blueFrequency = pulseIn(RGB_COLOUROUT,LOW);
+      blueColour = map(blueFrequency , blueMin, blueMax,255,0);
+      delay(100);     
+    }
+
+    /*Finalising the Colour and returns the colour as a char 
+      Colour Codes 
+        r - Red 
+        g - Green
+        b - Blue
+        y - Yellow
+        N - None 
+    */ 
+
+    char detectColour(){
+      //Limit the range for each colour:
+      redColour = constrain(redColour, 0, 255);
+      greenColour = constrain(greenColour, 0, 255);
+      blueColour = constrain(blueColour, 0, 255);
+
+      //Identifying the brightest color:
+      int maxVal = max(redColour, blueColour);
+      maxVal = max(maxVal, greenColour);
+      
+      //map new values
+      redColour = map(redColour, 0, maxVal, 0, 255);
+      greenColour = map(greenColour, 0, maxVal, 0, 255);
+      blueColour = map(blueColour, 0, maxVal, 0, 255);
+      redColour = constrain(redColour, 0, 255);
+      greenColour = constrain(greenColour, 0, 255);
+      blueColour = constrain(blueColour, 0, 255);
+
+      /* Finalising which colour is present and assigning it to colour variable.
+         RANGE VALUES MAY VARY  */
+      if (redColour > 250 && greenColour < 200 && blueColour < 200) {
+        colour = 'r'; //Red
       }
-
-      void receivedCommand() {
-
+      else if (redColour < 200 && greenColour > 250 && blueColour < 200) {
+        colour = 'g'; //Green
       }
   };
 #endif
@@ -231,10 +368,13 @@ void setup() {
   #endif
 
   Serial.begin(9600);
+  sensors.calibrate();
 }
 
 void loop() {
+  sensors.enableSensors(); 
   switch (comms.receivedCommand()) {
+    
     case 'x':
       break;
     
