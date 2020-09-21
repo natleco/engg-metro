@@ -245,7 +245,9 @@ State state();
           g - Green
           b - Blue
           y - Yellow
+          N - None 
      */ 
+
     char detectColour(){
       //Limit the range for each colour:
       redColour = constrain(redColour, 0, 255);
