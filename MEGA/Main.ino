@@ -156,8 +156,8 @@ State state();
       int blueMax;
     
       Sensors() {
-        // Use ::state to access the state class in this scope
-	      pinMode(RGB_S0, OUTPUT);
+        /* Use ::state to access the state class in this scope */
+        pinMode(RGB_S0, OUTPUT);
         pinMode(RGB_S1, OUTPUT);
         pinMode(RGB_S2,OUTPUT);
         pinMode(RGB_S3,OUTPUT);
@@ -167,11 +167,11 @@ State state();
 
     // Calibrating function
     void calibrate(){
-      // Aiming at WHITE colour
+      /* Aiming at WHITE colour */
       Serial.println("Sensors Calibrating - Min range...");
       Serial.println(" Sensed colour : White");
 
-      //setting calibration values - Min range:
+      /*setting calibration values - Min range: */
       digitalWrite(13, HIGH);
       delay(2000);
       digitalWrite(RGB_S2, LOW);
@@ -189,14 +189,14 @@ State state();
       blueMin = pulseIn(RGB_COLOUROUT, LOW);
       delay(100);
 
-      //Aiming at BLACK colour
+      /*Aiming at BLACK colour */
       Serial.println("next...");
       Serial.println("Sensors Calibrating - Max range...");
       digitalWrite(13, LOW);
       delay(2000);
       Serial.println("Black");
 
-      // setting calibration values- Max range:
+      /* setting calibration values- Max range: */
       digitalWrite(13, LOW);
       delay(2000);
       digitalWrite(RGB_S2, LOW);
@@ -217,36 +217,36 @@ State state();
 
     // Reads the colour intensity of every primary colour from the sensed object
     void readColours() {
-	    // Sensing Red Colour 
-	    digitalWrite(RGB_S2,LOW);
-	    digitalWrite(RGB_S3,LOW);
+	    /* Sensing Red Colour  */
+      digitalWrite(RGB_S2,LOW);
+      digitalWrite(RGB_S3,LOW);
       redFrequency = pulseIn(RGB_COLOUROUT,LOW);
       redColour = map(redFrequency , redMin, redMax,255,0);
       delay(100);
 
-	    // Sensing Green Colour 
-	    digitalWrite(RGB_S2,HIGH);
-    	digitalWrite(RGB_S3,HIGH);
+	    /* Sensing Green Colour */
+      digitalWrite(RGB_S2,HIGH);
+      digitalWrite(RGB_S3,HIGH);
       greenFrequency = pulseIn(RGB_COLOUROUT,LOW);
       greenColour = map(greenFrequency , greenMin, greenMax,255,0);
       delay(100);
 
-	    // Sensing Blue Colour 
-	    digitalWrite(RGB_S2,LOW);
-	    digitalWrite(RGB_S3,HIGH);
+	    /* Sensing Blue Colour */
+      digitalWrite(RGB_S2,LOW);
+      digitalWrite(RGB_S3,HIGH);
       blueFrequency = pulseIn(RGB_COLOUROUT,LOW);
       blueColour = map(blueFrequency , blueMin, blueMax,255,0);
       delay(100);     
 	  }
 
-    /* Finalising the Colour and returns the colour as a char 
-        Colour Codes 
-          r - Red 
-          g - Green
-          b - Blue
-          y - Yellow
-          N - None 
-     */ 
+    /*Finalising the Colour and returns the colour as a char 
+      Colour Codes 
+        r - Red 
+        g - Green
+        b - Blue
+        y - Yellow
+        N - None 
+    */ 
 
     char detectColour(){
       //Limit the range for each colour:
@@ -306,7 +306,7 @@ State state();
    // Invokes the functions needed to read and detect the colour from the sensed object
     char enableSensors(){
       readColours(); // printColour(); To Verify
-     return detectColour();
+      return detectColour();
     }
   };
    
@@ -325,5 +325,6 @@ void setup() {
 }
 
 void loop() {
-sensors.enableSensors(); // Enabling Sensors to detect colour
+  // Enabling Sensors to detect colour
+  sensors.enableSensors(); 
 }
