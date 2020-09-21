@@ -9,7 +9,13 @@
 #define ENABLE_MOTORS 1
 #define ENABLE_COMMS 1
 #define ENABLE_DOORS 1
+
 #define BAUD_RATE 9600
+
+#define MOTOR_PIN 8
+#define MOTOR_DRIVER_PIN 9
+#define ENCODER_PIN_A 2
+#define ENCODER_PIN_B 3
 
 class State {
   public:
@@ -31,8 +37,8 @@ class State {
     // Direction of train (0 or 1)
     char direction = 0;
 
-    // Speed of train
-    float speed = 0.0;
+    // Speed of train (1500 = stop, < 1500 = reverse, > 1500 = forward)
+    unsigned long speed = 1500;
 
     #if ENABLE_DOORS
       // Flag if doors are open
@@ -40,41 +46,30 @@ class State {
     #endif
 };
 
-State state();
+State state;
 
 #if ENABLE_COMMS
   class Comms {
     private: 
-     
       char command;
 
     public:
-      
       Comms() {
         Serial.begin(BAUD_RATE);
-
       }
 
       /*
         Send test command over comms and check that response is correct
       */
       bool calibrate() {
-
-        //this is sending the request over comms
-        Serial.print("C:1")
-        //delaying, to wait for a response 
+        char response;
+        Serial.print("C:1");
         delay(100);
-
-        //checking is response is available now
-        if(Serial.available() && Serial.availableForWrite()){
-          //checking the response
-          if(Serial.read == "b"){
-            return true;
-          }
+        if (Serial.available() != 0) {
+          response = Serial.read();
+          return (response == 'b');
         }
         return false;
-        
-        // Send a test request over comms and await a response over comms
       }
 
       /*
@@ -82,8 +77,9 @@ State state();
           < status code (0-9) >:< data type (a, d, s) >_< data >
       */
       bool sendCommand(char type, int data) {
+        char message[10];
         if (type && data) {
-          char message[10] = (::state.status + ":" + type + "_" + data);
+          snprintf(message, sizeof message, "%s:%s_%s", state.status, type, data);
           Serial.print("<");
           delay(100);
           Serial.print(message);
@@ -104,54 +100,104 @@ State state();
           d = Open/close doors
       */
       char receivedCommand() {
-
-        while(Serial.available()){
-          //assuming it is in the structure: "<" + command ">"
-          //command: any of the ones specified in the beginning: x, g, s, c or d
-
-          if(Serial.read()!="<" && Serial.read()!=">"){
-            //this is the command received
-            command = Serial.read();
+        char response;
+        while (Serial.available()) {
+          response = Serial.read();
+          if (response != '<' && response != '>') {
+            command = response;
+            delay(100);
           }
-        //this is the end of the command
-          if(Serial.read()==">"){
+          if (response == '>') {
             break;
           }
         }
-
         return command;
-
       }
-  }
+  };
 #endif
 
 #if ENABLE_MOTORS
   #include <Servo.h>
   #include <Encoder.h>
+
   class Motors {
+    private:
+      Servo motor;
+      Encoder motorEncoder(ENCODER_PIN_A, ENCODER_PIN_B);
+      char motorType = 0; // 0 = Train motors, 1 = Door motors
+
     public:
       Motors() {
-        // Use ::state to access the state class in this scope
+        pinMode(MOTOR_PIN, OUTPUT); 
+        motor.attach(MOTOR_PIN);
       }
 
-      /*
-        Test changing train direction and accelerate/decelerate
-      */
-      void calibrate() {
-        
-      }
-
-      void setAcceleration(int acceleration) {
+      void setTrainAcceleration(char acceleration) {
         switch (acceleration) {
-          case 0: 
-            //
+          case 0:
+            if (::state.speed != 1500) {
+              // Emergency stop (hard break)
+              motor.writeMicroseconds(1500);
+            }
+            break;
+          case 1:
+            if (::state.speed != 1500) {
+              // Stop train (gradual speed decrease)
+              motor.writeMicroseconds(1500);
+            }
+            break;
+          case 2:
+            if (::state.speed != 1650) {
+              // Slow train speed
+              motor.writeMicroseconds(1650);
+            }
+            break;
+          case 3:
+            if (::state.speed != 1750) {
+              // Medium train speed
+              motor.writeMicroseconds(1750);
+            }
+            break;
+          case 4:
+            if (::state.speed != 2000) {
+              // Fast train speed
+              motor.writeMicroseconds(2000);
+            }
+            break;
         }
       }
 
-      void changeDirection() {
-
+      void changeTrainDirection(char direction) {
+        switch (direction) {
+          case 0:
+            if (motorType == 0 && ::state.direction == 1) {
+              // Forwards
+              ::state.direction = 0;
+            }
+            break;
+          case 1:
+            if (motorType == 0 && ::state.direction == 0) {
+              // Backwards
+              ::state.direction = 1;
+            }
+            break;
+        }
       }
-  }
+
+      #if ENABLE_DOORS
+        void openTrainDoors() {
+          if (motorType == 1 && ::state.doorsOpen == 0) {
+            ::state.doorsOpen = 1;
+          }
+        }
+
+        void closeTrainDoors() {
+          if (motorType == 1 && ::state.doorsOpen == 1) {
+            ::state.doorsOpen = 0;
+          }
+        }
+      #endif
+  };
 #endif
 
 #if ENABLE_SENSORS
@@ -171,43 +217,37 @@ State state();
       void receivedCommand() {
 
       }
-  }
+  };
 #endif
 
-Comms comms();
-Motors motors();
-Sensors sensors();
+Comms comms;
+Motors motors;
+Sensors sensors;
 
 void setup() {
   #if DEBUG
     Serial1.begin(9600);
     Serial1.print("Entered DEBUG mode\n");
   #endif
+
+  Serial.begin(9600);
 }
 
 void loop() {
-
-  switch(receiveCommand()){
-    
+  switch (comms.receivedCommand()) {
     case 'x':
-
       break;
     
     case 'g':
-
       break;
     
     case 's':
-
       break;
     
     case 'c':
-
       break;
-    
+
     case 'd':
-
       break;
-
   }
 }
