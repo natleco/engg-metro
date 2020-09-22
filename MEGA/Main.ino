@@ -17,6 +17,12 @@
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
 
+#define RGB_COLOROUT 8
+#define RGB_S0 4
+#define RGB_S1 5 
+#define RGB_S2 7
+#define RGB_S3 6
+
 class State {
   public:
     /*
@@ -34,14 +40,12 @@ class State {
     */
     char status = 0;
 
-    // Direction of train (0 or 1)
     char direction = 0;
 
     // Speed of train (1500 = stop, < 1500 = reverse, > 1500 = forward)
     unsigned long speed = 1500;
 
     #if ENABLE_DOORS
-      // Flag if doors are open
       char doorsOpen = 0;
     #endif
 };
@@ -50,27 +54,25 @@ State state;
 
 #if ENABLE_COMMS
   class Comms {
-    private: 
+    public:
       char command;
 
-    public:
-      Comms() {
-        Serial.begin(BAUD_RATE);
-      }
-
-      /*
-        Send test command over comms and check that response is correct
-      */
-      bool calibrate() {
-        char response;
-        Serial.print("C:1");
-        delay(100);
-        if (Serial.available() != 0) {
-          response = Serial.read();
-          return (response == 'b');
+      #if DEBUG
+        void calibrate() {
+          Serial.print("Begin calibration for COMMS...");
+          char response;
+          Serial1.print("C:1");
+          delay(1000);
+          if (Serial1.available() != 0) {
+            response = Serial1.read();
+            if (response == 'b') {
+              Serial.print("COMMS calibration SUCCESS!");
+            } else {
+              Serial.print("COMMS calibration FAILED!");
+            }
+          }
         }
-        return false;
-      }
+      #endif
 
       /*
         Data is sent in this format: 
@@ -80,11 +82,11 @@ State state;
         char message[10];
         if (type && data) {
           snprintf(message, sizeof message, "%s:%s_%s", state.status, type, data);
-          Serial.print("<");
+          Serial1.print("<");
           delay(100);
-          Serial.print(message);
+          Serial1.print(message);
           delay(100);
-          Serial.print(">");
+          Serial1.print(">");
           return true;
         } else {
           return false;
@@ -101,8 +103,8 @@ State state;
       */
       char receivedCommand() {
         char response;
-        while (Serial.available()) {
-          response = Serial.read();
+        while (Serial1.available()) {
+          response = Serial1.read();
           if (response != '<' && response != '>') {
             command = response;
             delay(100);
@@ -120,15 +122,21 @@ State state;
   #include <Servo.h>
   #include <Encoder.h>
 
+  /* 
+    Motor Type: Servo with built-in rotary encoder
+    Motor Model: NeveRest Classic 60 Gearmotor
+    Motor Driver: Spark Motor Controller
+    Number of Motors: 1
+  */
   class Motors {
     private:
       Servo motor;
-      Encoder motorEncoder(ENCODER_PIN_A, ENCODER_PIN_B);
       char motorType = 0; // 0 = Train motors, 1 = Door motors
+      Encoder encoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
 
     public:
       Motors() {
-        pinMode(MOTOR_PIN, OUTPUT); 
+        pinMode(MOTOR_PIN, OUTPUT);
         motor.attach(MOTOR_PIN);
       }
 
@@ -201,158 +209,165 @@ State state;
 #endif
 
 #if ENABLE_SENSORS
-#define RGB_COLOUROUT 8
-#define RGB_S2 7
-#define RGB_S3 6
-#define RGB_S1 5 
-#define RGB_S0 4
+  #include <EEPROM.h>
 
-
+  /* 
+    Sensor Type: RGB sensors
+    Sensor Model: XC3708
+    Number of Sensors: 1
+  */
   class Sensors {
-    /* Sensor Type : RGB sensors 
-       Sensor Model : XC3708 
-       Number of sensors : 1 */
+    private:
+      // Reads the Frequency of the respective colours 
+      int redFrequency = 0;
+      int greenFrequency = 0;
+      int blueFrequency = 0;
+
+      // Amount of primary colour detection from the sensed object
+      int redColor;
+      int greenColor;
+      int blueColor;
+      
+      // Minimum and Maximum values for calibration
+      typedef struct Range {
+        int redMin;
+        int redMax;
+        int greenMin;
+        int greenMax;
+        int blueMin;
+        int blueMax;
+      } Range;
+      Range colorRange;
 
     public:
-      // Reads the Frequency of the respective colours 
-      int redFrequency =0;
-      int greenFrequency =0;
-      int blueFrequency =0;
+      char color = 'n';
 
-      // The final colour
-      char colour;
-
-      /* Amount of primary colour detection from the sensed object*/
-      int redColour;
-      int greenColour;
-      int blueColour;
-      
-      /* Minimum and Maximum values for calibration */
-      int redMin;
-      int redMax;
-      int greenMin;
-      int greenMax;
-      int blueMin;
-      int blueMax;
-    
       Sensors() {
-        /* Use ::state to access the state class in this scope */
+        // Get color range from EEPROM memory
+        EEPROM.get(0, colorRange);
+
         pinMode(RGB_S0, OUTPUT);
         pinMode(RGB_S1, OUTPUT);
-        pinMode(RGB_S2,OUTPUT);
-        pinMode(RGB_S3,OUTPUT);
-        pinMode(13,OUTPUT); // Tested for UNO
-        pinMode(RGB_COLOUROUT,INPUT);
+        pinMode(RGB_S2, OUTPUT);
+        pinMode(RGB_S3, OUTPUT);
+        pinMode(13, OUTPUT); // TODO: Change for MEGA; only Tested for UNO
+        pinMode(RGB_COLOROUT, INPUT);
       }
 
-    // Calibrating function
-    void calibrate(){
-      /* Aiming at WHITE colour */
-      Serial.println("Sensors Calibrating - Min range...");
-      Serial.println(" Sensed colour : White");
+      #if DEBUG
+        void calibrate() {
+          Serial.print("Begin calibration for SENSORS...");
 
-      /*setting calibration values - Min range: */
-      digitalWrite(13, HIGH);
-      delay(2000);
-      digitalWrite(RGB_S2, LOW);
-      digitalWrite(RGB_S3, LOW);
-      redMin = pulseIn(RGB_COLOUROUT, LOW);
-      delay(100);
+          // Aiming at WHITE color
+          Serial.println("SENSORS Calibrating - Min range...");
+          Serial.println("Detected color: WHITE");
 
-      digitalWrite(RGB_S2, HIGH);
-      digitalWrite(RGB_S3, HIGH);
-      greenMin = pulseIn(RGB_COLOUROUT, LOW);
-      delay(100);
+          // Setting calibration values - Min range
+          digitalWrite(13, HIGH);
+          delay(2000);
+          digitalWrite(RGB_S2, LOW);
+          digitalWrite(RGB_S3, LOW);
+          colorRange.redMin = pulseIn(RGB_COLOROUT, LOW);
+          delay(100);
 
-      digitalWrite(RGB_S2, LOW);
-      digitalWrite(RGB_S3, HIGH);
-      blueMin = pulseIn(RGB_COLOUROUT, LOW);
-      delay(100);
+          digitalWrite(RGB_S2, HIGH);
+          digitalWrite(RGB_S3, HIGH);
+          colorRange.greenMin = pulseIn(RGB_COLOROUT, LOW);
+          delay(100);
 
-      /*Aiming at BLACK colour */
-      Serial.println("next...");
-      Serial.println("Sensors Calibrating - Max range...");
-      digitalWrite(13, LOW);
-      delay(2000);
-      Serial.println("Black");
+          digitalWrite(RGB_S2, LOW);
+          digitalWrite(RGB_S3, HIGH);
+          colorRange.blueMin = pulseIn(RGB_COLOROUT, LOW);
+          delay(100);
 
-      /* setting calibration values- Max range: */
-      digitalWrite(13, LOW);
-      delay(2000);
-      digitalWrite(RGB_S2, LOW);
-      digitalWrite(RGB_S3, LOW);
-      redMax = pulseIn(RGB_COLOUROUT, LOW);
-      delay(100);
-      digitalWrite(RGB_S2, HIGH);
-      digitalWrite(RGB_S3, HIGH);
-      greenMax = pulseIn(RGB_COLOUROUT, LOW);
-      delay(100);
-      digitalWrite(RGB_S2, LOW);
-      digitalWrite(RGB_S3, HIGH);
-      blueMax = pulseIn(RGB_COLOUROUT, LOW);
-      delay(100);
-      Serial.println("Calibration Complete ");
-      digitalWrite(13, LOW);
-    }
+          // Aiming at BLACK color
+          Serial.println("SENSORS Calibrating - Max range...");
+          digitalWrite(13, LOW);
+          delay(2000);
+          Serial.println("Detected color: BLACK");
 
-    // Reads the colour intensity of every primary colour from the sensed object
-    void readColours() {
-      /* Sensing Red Colour  */
-      digitalWrite(RGB_S2,LOW);
-      digitalWrite(RGB_S3,LOW);
-      redFrequency = pulseIn(RGB_COLOUROUT,LOW);
-      redColour = map(redFrequency , redMin, redMax,255,0);
-      delay(100);
+          // Setting calibration values - Max range
+          digitalWrite(13, LOW);
+          delay(2000);
+          digitalWrite(RGB_S2, LOW);
+          digitalWrite(RGB_S3, LOW);
+          colorRange.redMax = pulseIn(RGB_COLOROUT, LOW);
+          delay(100);
+          digitalWrite(RGB_S2, HIGH);
+          digitalWrite(RGB_S3, HIGH);
+          colorRange.greenMax = pulseIn(RGB_COLOROUT, LOW);
+          delay(100);
+          digitalWrite(RGB_S2, LOW);
+          digitalWrite(RGB_S3, HIGH);
+          colorRange.blueMax = pulseIn(RGB_COLOROUT, LOW);
+          delay(100);
+          Serial.println("SENSORS calibration COMPLETE!");
+          digitalWrite(13, LOW);
 
-      /* Sensing Green Colour */
-      digitalWrite(RGB_S2,HIGH);
-      digitalWrite(RGB_S3,HIGH);
-      greenFrequency = pulseIn(RGB_COLOUROUT,LOW);
-      greenColour = map(greenFrequency , greenMin, greenMax,255,0);
-      delay(100);
+          // Save color range to EEPROM memory
+          EEPROM.put(0, colorRange);
+        }
+      #endif
 
-      /* Sensing Blue Colour */
-      digitalWrite(RGB_S2,LOW);
-      digitalWrite(RGB_S3,HIGH);
-      blueFrequency = pulseIn(RGB_COLOUROUT,LOW);
-      blueColour = map(blueFrequency , blueMin, blueMax,255,0);
-      delay(100);     
-    }
+      /*
+        Finalising the Colour and returns the colour as a char 
+        Colour Codes 
+          r - Red 
+          g - Green
+          b - Blue
+          y - Yellow
+          n - None 
+      */
+      char detectedColor() {
+        // Sensing Red Color
+        digitalWrite(RGB_S2, LOW);
+        digitalWrite(RGB_S3, LOW);
+        redFrequency = pulseIn(RGB_COLOROUT, LOW);
+        redColor = map(redFrequency, colorRange.redMin, colorRange.redMax, 255, 0);
+        delay(100);
 
-    /*Finalising the Colour and returns the colour as a char 
-      Colour Codes 
-        r - Red 
-        g - Green
-        b - Blue
-        y - Yellow
-        N - None 
-    */ 
+        // Sensing Green Color
+        digitalWrite(RGB_S2,HIGH);
+        digitalWrite(RGB_S3,HIGH);
+        greenFrequency = pulseIn(RGB_COLOROUT, LOW);
+        greenColor = map(greenFrequency, colorRange.greenMin, colorRange.greenMax, 255, 0);
+        delay(100);
 
-    char detectColour(){
-      //Limit the range for each colour:
-      redColour = constrain(redColour, 0, 255);
-      greenColour = constrain(greenColour, 0, 255);
-      blueColour = constrain(blueColour, 0, 255);
+        // Sensing Blue Color
+        digitalWrite(RGB_S2,LOW);
+        digitalWrite(RGB_S3,HIGH);
+        blueFrequency = pulseIn(RGB_COLOROUT, LOW);
+        blueColor = map(blueFrequency, colorRange.blueMin, colorRange.blueMax, 255, 0);
+        delay(100);
 
-      //Identifying the brightest color:
-      int maxVal = max(redColour, blueColour);
-      maxVal = max(maxVal, greenColour);
-      
-      //map new values
-      redColour = map(redColour, 0, maxVal, 0, 255);
-      greenColour = map(greenColour, 0, maxVal, 0, 255);
-      blueColour = map(blueColour, 0, maxVal, 0, 255);
-      redColour = constrain(redColour, 0, 255);
-      greenColour = constrain(greenColour, 0, 255);
-      blueColour = constrain(blueColour, 0, 255);
+        // Limit the range for each color
+        redColor = constrain(redColor, 0, 255);
+        greenColor = constrain(greenColor, 0, 255);
+        blueColor = constrain(blueColor, 0, 255);
 
-      /* Finalising which colour is present and assigning it to colour variable.
-         RANGE VALUES MAY VARY  */
-      if (redColour > 250 && greenColour < 200 && blueColour < 200) {
-        colour = 'r'; //Red
-      }
-      else if (redColour < 200 && greenColour > 250 && blueColour < 200) {
-        colour = 'g'; //Green
+        // Identifying the brightest color
+        int maxVal = max(redColor, blueColor);
+        maxVal = max(maxVal, greenColor);
+        
+        // Map new color values
+        redColor = constrain(map(redColor, 0, maxVal, 0, 255), 0, 255);
+        greenColor = constrain(map(greenColor, 0, maxVal, 0, 255), 0, 255);
+        blueColor = constrain(map(blueColor, 0, maxVal, 0, 255), 0, 255);
+
+        // Determine which color is most likely detected
+        if (redColor > 250 && greenColor < 200 && blueColor < 200) {
+          color = 'r'; // Red
+        } else if (redColor < 200 && greenColor > 250 && blueColor < 200) {
+          color = 'g'; // Green
+        } else if (redColor < 200 && blueColor > 250) {
+          color = 'b'; // Blue
+        } else if (redColor > 200 && greenColor > 200 && blueColor < 100) {
+          color = 'y'; // Yellow
+        } else {
+          color = 'n'; // No color
+        }
+
+        return color;
       }
   };
 #endif
@@ -362,17 +377,35 @@ Motors motors;
 Sensors sensors;
 
 void setup() {
-  #if DEBUG
-    Serial1.begin(9600);
-    Serial1.print("Entered DEBUG mode\n");
-  #endif
+  Serial1.begin(BAUD_RATE);
 
-  Serial.begin(9600);
-  sensors.calibrate();
+  #if DEBUG
+    Serial.begin(BAUD_RATE);
+    Serial.print("Entered DEBUG mode\n");
+    comms.calibrate();
+    sensors.calibrate();
+  #endif
 }
 
 void loop() {
-  sensors.enableSensors(); 
+  switch (sensors.detectedColor()) {
+
+    case 'r':
+      break;
+    
+    case 'g':
+      break;
+    
+    case 'b':
+      break;
+    
+    case 'y':
+      break;
+
+    case 'n':
+      break;
+  }
+
   switch (comms.receivedCommand()) {
     
     case 'x':

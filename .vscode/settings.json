@@ -1,3 +1,12 @@
 {
-    "arduino.path": "C:\\Program Files (x86)\\Arduino"
+    "arduino.path": "C:\\Program Files (x86)\\Arduino",
+    "files.associations": {
+        "istream": "cpp",
+        "memory": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp",
+        "xlocnum": "cpp"
+    },
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
 }
