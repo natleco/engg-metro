@@ -12,6 +12,8 @@
 
 #define BAUD_RATE 9600
 
+#define MAX_COMMANDS 100
+
 #define MOTOR_PIN 8
 #define MOTOR_DRIVER_PIN 9
 #define ENCODER_PIN_A 2
@@ -42,12 +44,48 @@ class State {
 
     char direction = 0;
 
-    // Speed of train (1500 = stop, < 1500 = reverse, > 1500 = forward)
+    /*
+      Speed of train (1500 = stop, < 1500 = reverse, > 1500 = forward)
+    */
     unsigned long speed = 1500;
 
     #if ENABLE_DOORS
       char doorsOpen = 0;
     #endif
+
+    /*
+      Queue of commands received from either Sensors or Comms
+    */
+    char commandQueue[MAX_COMMANDS];
+    int commandQueueBack = -1;
+    int commandQueueFront = 0;
+    int commandQueueCount = 0;
+
+    /*
+      Adds a command to the commandQueue
+    */
+    void enqueueCommand(char command) {
+      if (commandQueueCount != MAX_COMMANDS) {
+        if (commandQueueBack == MAX_COMMANDS - 1) {
+          commandQueueBack = -1;            
+        }
+        commandQueue[++commandQueueBack] = command;
+        commandQueueCount++;
+      }
+    }
+
+    /*
+      Removes oldest command from the commandQueue
+    */
+    char dequeueCommand() {
+      char command = commandQueue[commandQueueFront++];
+      if (commandQueueFront == MAX_COMMANDS) {
+        commandQueueFront = 0;
+      }
+      commandQueueCount--;
+      return command;
+    }
+
 };
 
 State state;
@@ -55,8 +93,6 @@ State state;
 #if ENABLE_COMMS
   class Comms {
     public:
-      char command;
-
       #if DEBUG
         void calibrate() {
           Serial.print("Begin calibration for COMMS...");
@@ -96,13 +132,14 @@ State state;
       /*
         Data is received in this format:
           x = Emergency stop
-          g = Start train
+          m = Start train
           s = Stop train
           c = Change train direction
           d = Open/close doors
       */
       char receivedCommand() {
         char response;
+        char command = 'n';
         while (Serial1.available()) {
           response = Serial1.read();
           if (response != '<' && response != '>') {
@@ -388,39 +425,46 @@ void setup() {
 }
 
 void loop() {
-  switch (sensors.detectedColor()) {
 
-    case 'r':
-      break;
-    
-    case 'g':
-      break;
-    
-    case 'b':
-      break;
-    
-    case 'y':
-      break;
-
-    case 'n':
-      break;
+  char sensorsCommand = sensors.detectedColor();
+  if (sensorsCommand != 'n') {
+    state.enqueueCommand(sensorsCommand);
   }
 
-  switch (comms.receivedCommand()) {
-    
-    case 'x':
-      break;
-    
-    case 'g':
-      break;
-    
-    case 's':
-      break;
-    
-    case 'c':
-      break;
-
-    case 'd':
-      break;
+  char commsCommand = comms.receivedCommand();
+  if (commsCommand != 'n') {
+    state.enqueueCommand(commsCommand);
   }
+
+  if (state.commandQueueCount != 0) {
+    switch (state.dequeueCommand()) {
+      // Sensors & Comms: Stop train (such as at station)
+      case 'r':
+      case 's':
+        break;
+      
+      // Sensors: Speed up or slow down
+      case 'g':
+        break;
+      
+      // Sensors & Comms: Emergency stop
+      case 'b':
+      case 'x':
+        break;
+
+      // Sensors & Comms: Change train direction
+      case 'y':
+      case 'c':
+        break;
+
+      // Comms: Start train
+      case 'm':
+        break;
+
+      // Comms: Open/Close doors
+      case 'd':
+        break;
+    }
+  }
+
 }
