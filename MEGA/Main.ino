@@ -10,18 +10,24 @@
 #define ENABLE_COMMS 1
 #define ENABLE_DOORS 1
 
+#define MAX_COMMANDS 100
 #define BAUD_RATE 9600
 
-#define MAX_COMMANDS 100
+#define BT_NAME "enggmetro"
+#define BT_PIN 8080
+#define BT_RX_PIN 16
+#define BT_TX_PIN 17
 
-#define MOTOR_PIN 8
-#define MOTOR_DRIVER_PIN 9
+#define MOTOR_MAX_ACCELERATION 1700
+#define MOTOR_MIN_ACCELERATION 1300
+#define MOTOR_DOOR_PIN 8
+#define MOTOR_TRAIN_PIN 9
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
 
 #define RGB_COLOROUT 8
 #define RGB_S0 4
-#define RGB_S1 5 
+#define RGB_S1 5
 #define RGB_S2 7
 #define RGB_S3 6
 
@@ -87,24 +93,35 @@ class State {
     }
 
 };
-
 State state;
 
 #if ENABLE_COMMS
+  #include <SoftwareSerial.h>
+
   class Comms {
+    private:
+      SoftwareSerial BTSerial = SoftwareSerial(BT_RX_PIN, BT_TX_PIN);
+
     public:
+      Comms() {
+        BTSerial.begin(BAUD_RATE);
+        delay(1000);
+        BTSerial.write("AT+NAME" + BT_NAME);
+        BTSerial.write("AT+PIN" + BT_PIN);
+      }
+
       #if DEBUG
         void calibrate() {
-          Serial.print("Begin calibration for COMMS...");
+          Serial.println("- Begin calibration for COMMS...");
           char response;
-          Serial1.print("C:1");
+          BTSerial.write("C:1");
           delay(1000);
-          if (Serial1.available() != 0) {
-            response = Serial1.read();
+          if (BTSerial.available() != 0) {
+            response = BTSerial.read();
             if (response == 'b') {
-              Serial.print("COMMS calibration SUCCESS!");
+              Serial.print("- COMMS calibration SUCCESS!");
             } else {
-              Serial.print("COMMS calibration FAILED!");
+              Serial.print("- COMMS calibration FAILED!");
             }
           }
         }
@@ -112,17 +129,17 @@ State state;
 
       /*
         Data is sent in this format: 
-          < status code (0-9) >:< data type (a, d, s) >_< data >
+          < status code (0-9) : data type (a, d, s) _ data >
       */
       bool sendCommand(char type, int data) {
         char message[10];
         if (type && data) {
           snprintf(message, sizeof message, "%s:%s_%s", state.status, type, data);
-          Serial1.print("<");
+          BTSerial.write("<");
           delay(100);
-          Serial1.print(message);
+          BTSerial.write(message);
           delay(100);
-          Serial1.print(">");
+          BTSerial.write(">");
           return true;
         } else {
           return false;
@@ -140,8 +157,8 @@ State state;
       char receivedCommand() {
         char response;
         char command = 'n';
-        while (Serial1.available()) {
-          response = Serial1.read();
+        while (BTSerial.available()) {
+          response = BTSerial.read();
           if (response != '<' && response != '>') {
             command = response;
             delay(100);
@@ -153,6 +170,7 @@ State state;
         return command;
       }
   };
+  Comms comms;
 #endif
 
 #if ENABLE_MOTORS
@@ -160,111 +178,96 @@ State state;
   #include <Encoder.h>
 
   /* 
-    Motor Type: Servo with built-in rotary encoder
-    Motor Model: NeveRest Classic 60 Gearmotor
-    Motor Driver: Spark Motor Controller
-    Number of Motors: 1
+    Motor Driver: NeveRest Classic 60 Gearmotor
   */
   class Motors {
     private:
-      Servo motor;
-      char motorType = 0; // 0 = Train motors, 1 = Door motors
-      Encoder encoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
+      Encoder trainEncoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
+      int encoderCount = 0;
+      int encoderLastCount;
+      Servo trainMotor;
+      Servo doorServo;
 
     public:
       Motors() {
-        pinMode(MOTOR_PIN, OUTPUT);
-        motor.attach(MOTOR_PIN);
+        pinMode(MOTOR_TRAIN_PIN, OUTPUT);
+        pinMode(MOTOR_DOOR_PIN, OUTPUT);
+        trainMotor.attach(MOTOR_TRAIN_PIN);
+        doorMotor.attach(MOTOR_DOOR_PIN);
+        attachInterrupt(0, setTrainEncoder, CHANGE);
+	      attachInterrupt(1, setTrainEncoder, CHANGE);
       }
 
-      void setTrainAcceleration(char acceleration) {
-        switch (acceleration) {
-          case 0:
-            if (::state.speed != 1500) {
-              // Emergency stop (hard break)
-              motor.writeMicroseconds(1500);
-            }
-            break;
-          case 1:
-            if (::state.speed != 1500) {
-              // Stop train (gradual speed decrease)
-              motor.writeMicroseconds(1500);
-            }
-            break;
-          case 2:
-            if (::state.speed != 1650) {
-              // Slow train speed
-              motor.writeMicroseconds(1650);
-            }
-            break;
-          case 3:
-            if (::state.speed != 1750) {
-              // Medium train speed
-              motor.writeMicroseconds(1750);
-            }
-            break;
-          case 4:
-            if (::state.speed != 2000) {
-              // Fast train speed
-              motor.writeMicroseconds(2000);
-            }
-            break;
+      void easeTrainSpeed(unsigned long speed) {
+        if (::state.speed != 1500) {
+          if (speed > 1500 && speed < MOTOR_MAX_ACCELERATION) {
+            trainMotor.writeMicroseconds(speed);
+            while (::state.speed != 1500)
+          } else if (speed < 1500 && speed < MOTOR_MIN_ACCELERATION) {
+
+          }
         }
       }
 
-      void changeTrainDirection(char direction) {
-        switch (direction) {
-          case 0:
-            if (motorType == 0 && ::state.direction == 1) {
-              // Forwards
-              ::state.direction = 0;
-            }
-            break;
-          case 1:
-            if (motorType == 0 && ::state.direction == 0) {
-              // Backwards
-              ::state.direction = 1;
-            }
-            break;
-        }
+      void setTrainSpeed(unsigned long speed) {
+        trainMotor.writeMicroseconds(speed);
+        ::state.speed = speed;
+      }
+
+      void setTrainEncoder() {
+        encoderCount++;
       }
 
       #if ENABLE_DOORS
         void openTrainDoors() {
-          if (motorType == 1 && ::state.doorsOpen == 0) {
+          if (::state.doorsOpen == 0) {
+            for (int i = 0; i <= 95; i += 10) {
+              doorServo.write(i);
+              delay(250);
+            }
             ::state.doorsOpen = 1;
           }
         }
 
         void closeTrainDoors() {
-          if (motorType == 1 && ::state.doorsOpen == 1) {
+          if (::state.doorsOpen == 1) {
+            for (int i = 190; i >= 95; i -= 10) {
+              doorServo.write(i);
+              delay(250);
+            }
             ::state.doorsOpen = 0;
           }
         }
       #endif
   };
+  Motors motors;
 #endif
 
 #if ENABLE_SENSORS
   #include <EEPROM.h>
 
   /* 
-    Sensor Type: RGB sensors
-    Sensor Model: XC3708
-    Number of Sensors: 1
+    RGB Sensor: XC3708
+    Accelerometer Sensor: MPU6050
   */
   class Sensors {
     private:
-      // Reads the Frequency of the respective colours 
-      int redFrequency = 0;
-      int greenFrequency = 0;
-      int blueFrequency = 0;
+      // Amount of primary color detection from the sensed object
+      typedef struct Color {
+        int red;
+        int green;
+        int blue;
+      } Color;
+      Color color;
 
-      // Amount of primary colour detection from the sensed object
-      int redColor;
-      int greenColor;
-      int blueColor;
-      
+      // Reads the Frequency of the respective colors 
+      typedef struct Frequency {
+        int red = 0;
+        int green = 0;
+        int blue = 0;
+      } Frequency;
+      Frequency colorFrequency;
+
       // Minimum and Maximum values for calibration
       typedef struct Range {
         int redMin;
@@ -277,7 +280,6 @@ State state;
       Range colorRange;
 
     public:
-      char color = 'n';
 
       Sensors() {
         // Get color range from EEPROM memory
@@ -293,11 +295,12 @@ State state;
 
       #if DEBUG
         void calibrate() {
-          Serial.print("Begin calibration for SENSORS...");
+          // Calibrate RGB sensor
+          Serial.print("- Begin calibration for RGB sensor...");
 
           // Aiming at WHITE color
-          Serial.println("SENSORS Calibrating - Min range...");
-          Serial.println("Detected color: WHITE");
+          Serial.println("- RGB sensor calibrating - Min range...");
+          Serial.println("- Detected color: WHITE");
 
           // Setting calibration values - Min range
           digitalWrite(13, HIGH);
@@ -318,10 +321,10 @@ State state;
           delay(100);
 
           // Aiming at BLACK color
-          Serial.println("SENSORS Calibrating - Max range...");
+          Serial.println("- RGB sensor calibrating - Max range...");
           digitalWrite(13, LOW);
           delay(2000);
-          Serial.println("Detected color: BLACK");
+          Serial.println("- Detected color: BLACK");
 
           // Setting calibration values - Max range
           digitalWrite(13, LOW);
@@ -338,17 +341,21 @@ State state;
           digitalWrite(RGB_S3, HIGH);
           colorRange.blueMax = pulseIn(RGB_COLOROUT, LOW);
           delay(100);
-          Serial.println("SENSORS calibration COMPLETE!");
+          Serial.println("- RGB sensor calibration COMPLETE!");
           digitalWrite(13, LOW);
 
           // Save color range to EEPROM memory
           EEPROM.put(0, colorRange);
+
+          // Calibrate Accelerometer sensor
+          Serial.print("- Begin calibration for Accelerometer sensor...");
+
         }
       #endif
 
       /*
-        Finalising the Colour and returns the colour as a char 
-        Colour Codes 
+        Finalising the Color and returns the color as a char 
+        Color Codes 
           r - Red 
           g - Green
           b - Blue
@@ -359,73 +366,73 @@ State state;
         // Sensing Red Color
         digitalWrite(RGB_S2, LOW);
         digitalWrite(RGB_S3, LOW);
-        redFrequency = pulseIn(RGB_COLOROUT, LOW);
-        redColor = map(redFrequency, colorRange.redMin, colorRange.redMax, 255, 0);
+        colorFrequency.red = pulseIn(RGB_COLOROUT, LOW);
+        color.red = map(colorFrequency.red, colorRange.redMin, colorRange.redMax, 255, 0);
         delay(100);
 
         // Sensing Green Color
         digitalWrite(RGB_S2,HIGH);
         digitalWrite(RGB_S3,HIGH);
-        greenFrequency = pulseIn(RGB_COLOROUT, LOW);
-        greenColor = map(greenFrequency, colorRange.greenMin, colorRange.greenMax, 255, 0);
+        colorFrequency.green = pulseIn(RGB_COLOROUT, LOW);
+        color.green = map(colorFrequency.green, colorRange.greenMin, colorRange.greenMax, 255, 0);
         delay(100);
 
         // Sensing Blue Color
         digitalWrite(RGB_S2,LOW);
         digitalWrite(RGB_S3,HIGH);
-        blueFrequency = pulseIn(RGB_COLOROUT, LOW);
-        blueColor = map(blueFrequency, colorRange.blueMin, colorRange.blueMax, 255, 0);
+        colorFrequency.blue = pulseIn(RGB_COLOROUT, LOW);
+        color.blue = map(colorFrequency.blue, colorRange.blueMin, colorRange.blueMax, 255, 0);
         delay(100);
 
         // Limit the range for each color
-        redColor = constrain(redColor, 0, 255);
-        greenColor = constrain(greenColor, 0, 255);
-        blueColor = constrain(blueColor, 0, 255);
+        color.red = constrain(color.red, 0, 255);
+        color.green = constrain(color.green, 0, 255);
+        color.blue = constrain(color.blue, 0, 255);
 
         // Identifying the brightest color
-        int maxVal = max(redColor, blueColor);
-        maxVal = max(maxVal, greenColor);
+        int maxVal = max(color.red, color.blue);
+        maxVal = max(maxVal, color.green);
         
         // Map new color values
-        redColor = constrain(map(redColor, 0, maxVal, 0, 255), 0, 255);
-        greenColor = constrain(map(greenColor, 0, maxVal, 0, 255), 0, 255);
-        blueColor = constrain(map(blueColor, 0, maxVal, 0, 255), 0, 255);
+        color.red = constrain(map(color.red, 0, maxVal, 0, 255), 0, 255);
+        color.green = constrain(map(color.green, 0, maxVal, 0, 255), 0, 255);
+        color.blue = constrain(map(color.blue, 0, maxVal, 0, 255), 0, 255);
 
         // Determine which color is most likely detected
-        if (redColor > 250 && greenColor < 200 && blueColor < 200) {
-          color = 'r'; // Red
-        } else if (redColor < 200 && greenColor > 250 && blueColor < 200) {
-          color = 'g'; // Green
-        } else if (redColor < 200 && blueColor > 250) {
-          color = 'b'; // Blue
-        } else if (redColor > 200 && greenColor > 200 && blueColor < 100) {
-          color = 'y'; // Yellow
-        } else {
-          color = 'n'; // No color
+        if (color.red > 250 && color.green < 200 && color.blue < 200) {
+          return 'r'; // Red
+        } else if (color.red < 200 && color.green > 250 && color.blue < 200) {
+          return 'g'; // Green
+        } else if (color.red < 200 && color.blue > 250) {
+          return 'b'; // Blue
+        } else if (color.red > 200 && color.green > 200 && color.blue < 100) {
+          return 'y'; // Yellow
         }
+        return 'n'; // No color
+      }
 
-        return color;
+      /*
+        Estimated velocity (or speed) detected via the Accelerometer
+      */
+      int detectedSpeed() {
+
       }
   };
+  Sensors sensors;
 #endif
 
-Comms comms;
-Motors motors;
-Sensors sensors;
-
 void setup() {
-  Serial1.begin(BAUD_RATE);
+  Serial.begin(BAUD_RATE);
+  Serial.println("Welcome to ENGG-METRO!");
 
   #if DEBUG
-    Serial.begin(BAUD_RATE);
-    Serial.print("Entered DEBUG mode\n");
+    Serial.println(" - Entered DEBUG mode");
     comms.calibrate();
     sensors.calibrate();
   #endif
 }
 
 void loop() {
-
   char sensorsCommand = sensors.detectedColor();
   if (sensorsCommand != 'n') {
     state.enqueueCommand(sensorsCommand);
@@ -450,6 +457,7 @@ void loop() {
       // Sensors & Comms: Emergency stop
       case 'b':
       case 'x':
+        motors.setTrainAcceleration(1500);
         break;
 
       // Sensors & Comms: Change train direction
@@ -466,5 +474,4 @@ void loop() {
         break;
     }
   }
-
 }
