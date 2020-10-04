@@ -5,7 +5,10 @@
         "memory": "cpp",
         "type_traits": "cpp",
         "utility": "cpp",
-        "xlocnum": "cpp"
+        "xlocnum": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp",
+        "initializer_list": "cpp"
     },
     "editor.insertSpaces": true,
     "editor.tabSize": 2
