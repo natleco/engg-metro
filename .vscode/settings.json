@@ -7,7 +7,8 @@
         "utility": "cpp",
         "xlocnum": "cpp",
         "xstring": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "initializer_list": "cpp"
     },
     "editor.insertSpaces": true,
     "editor.tabSize": 2

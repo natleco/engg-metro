@@ -1,10 +1,10 @@
 /*
-  State Machine, Motors & Sensors - Arduino MEGA (T1/Carriage 2)
+  State Machine, Motors & Sensors - Arduino MEGA (Train 2)
   Team: T1_C3
   Members: Afroja Rowson Akter, Nicholas Drummond, Safal Maharjan, Jayakrithi Shivakumar & Nathan Lecompte
 */
 
-#define DEBUG 0
+#define DEBUG 1
 #define ENABLE_SENSORS 1
 #define ENABLE_MOTORS 1
 #define ENABLE_COMMS 1
@@ -13,15 +13,11 @@
 #define MAX_COMMANDS 100
 #define BAUD_RATE 9600
 
-#define BT_NAME "enggmetro"
-#define BT_PIN 8080
 #define BT_RX_PIN 16
 #define BT_TX_PIN 17
 
-#define MOTOR_MAX_ACCELERATION 1700
-#define MOTOR_MIN_ACCELERATION 1300
 #define MOTOR_DOOR_PIN 8
-#define MOTOR_TRAIN_PIN 9
+#define MOTOR_DRIVER_PIN 9
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
 
@@ -34,33 +30,37 @@
 class State {
   public:
     /*
-      Status codes:
-      0 = Default state (no errors)
-      1 = Emergency stopped state
-      2 = Comms calibration failed state
-      3 = Comms link disconnected state
-      4 = Received malformed command over Comms link state
-      5 = Failed to send command over Comms link state
-      6 = Motors calibration failed state
-      7 = Motors command failed state
-      8 = Sensors calibration failed state
-      9 = Sensors received malformed state
+      Status codes; values include:
+        0 = Stopped at station state
+        1 = Moving state
+        2 = Emergency stopped state
+        3 = Unrecognised command error
     */
-    char status = 0;
-
-    char direction = 0;
+    int trainStatus = 0;
 
     /*
-      Speed of train (1500 = stop, < 1500 = reverse, > 1500 = forward)
+      Direction of train; values include:
+        0 = Forwards
+        1 = Backwards
     */
-    unsigned long speed = 1500;
+    int trainDirection = 0;
+
+    /*
+      Speed of train; values include:
+        0 = No movement (stopped)
+        1 = Slow speed
+        2 = Normal speed
+      
+      TODO: Use more accurate speed values
+    */
+    int trainSpeed = 0;
 
     #if ENABLE_DOORS
       char doorsOpen = 0;
     #endif
 
     /*
-      Queue of commands received from either Sensors or Comms
+      Queue of commands received from Sensors or Comms
     */
     char commandQueue[MAX_COMMANDS];
     int commandQueueBack = -1;
@@ -68,7 +68,7 @@ class State {
     int commandQueueCount = 0;
 
     /*
-      Adds a command to the commandQueue
+      Add command to commandQueue
     */
     void enqueueCommand(char command) {
       if (commandQueueCount != MAX_COMMANDS) {
@@ -81,7 +81,7 @@ class State {
     }
 
     /*
-      Removes oldest command from the commandQueue
+      Remove oldest command from commandQueue
     */
     char dequeueCommand() {
       char command = commandQueue[commandQueueFront++];
@@ -99,55 +99,25 @@ State state;
   #include <SoftwareSerial.h>
 
   class Comms {
-    private:
+    public:
       SoftwareSerial BTSerial = SoftwareSerial(BT_RX_PIN, BT_TX_PIN);
 
-    public:
-      Comms() {
-        BTSerial.begin(BAUD_RATE);
-        delay(1000);
-        BTSerial.write("AT+NAME" + BT_NAME);
-        BTSerial.write("AT+PIN" + BT_PIN);
-      }
-
-      #if DEBUG
-        void calibrate() {
-          Serial.println("- Begin calibration for COMMS...");
-          char response;
-          BTSerial.write("C:1");
-          delay(1000);
-          if (BTSerial.available() != 0) {
-            response = BTSerial.read();
-            if (response == 'b') {
-              Serial.print("- COMMS calibration SUCCESS!");
-            } else {
-              Serial.print("- COMMS calibration FAILED!");
-            }
-          }
-        }
-      #endif
-
       /*
-        Data is sent in this format: 
-          < status code (0-9) : data type (a, d, s) _ data >
+        Send data over Comms link; data is sent in this format: 
+          < status code (0-9) : data type (a = acceleration, d = direction, s = station) _ data >
       */
-      bool sendCommand(char type, int data) {
+      void sendData(char type, char data) {
         char message[10];
-        if (type && data) {
-          snprintf(message, sizeof message, "%s:%s_%s", state.status, type, data);
-          BTSerial.write("<");
-          delay(100);
-          BTSerial.write(message);
-          delay(100);
-          BTSerial.write(">");
-          return true;
-        } else {
-          return false;
-        }
+        snprintf(message, sizeof(message), "%s:%s_%s", ::state.trainStatus, type, data);
+        BTSerial.write("<");
+        delay(100);
+        BTSerial.write(message);
+        delay(100);
+        BTSerial.write(">");
       }
 
       /*
-        Data is received in this format:
+        Handle received command over Comms link; commands recognised include:
           x = Emergency stop
           m = Start train
           s = Stop train
@@ -178,59 +148,46 @@ State state;
   #include <Encoder.h>
 
   /* 
-    Motor Driver: NeveRest Classic 60 Gearmotor
+    Motor Driver: REV Robotics SPARK Motor Controller
+    Motor: NeveRest Classic 60 Gearmotor
   */
   class Motors {
     private:
       Encoder trainEncoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
-      int encoderCount = 0;
-      int encoderLastCount;
-      Servo trainMotor;
+      int trainEncoderCount = 0;
       Servo doorServo;
 
     public:
       Motors() {
-        pinMode(MOTOR_TRAIN_PIN, OUTPUT);
         pinMode(MOTOR_DOOR_PIN, OUTPUT);
-        trainMotor.attach(MOTOR_TRAIN_PIN);
-        doorMotor.attach(MOTOR_DOOR_PIN);
-        attachInterrupt(0, setTrainEncoder, CHANGE);
-	      attachInterrupt(1, setTrainEncoder, CHANGE);
+        doorServo.attach(MOTOR_DOOR_PIN);
       }
 
-      void easeTrainSpeed(unsigned long speed) {
-        if (::state.speed != 1500) {
-          if (speed > 1500 && speed < MOTOR_MAX_ACCELERATION) {
-            trainMotor.writeMicroseconds(speed);
-            while (::state.speed != 1500)
-          } else if (speed < 1500 && speed < MOTOR_MIN_ACCELERATION) {
-
-          }
-        }
+      /*
+        Ease train into provided speed setting:
+          0 = No movement (stopped)
+          1 = Slow speed
+          2 = Normal speed
+      */
+      void easeTrainSpeed(int speed) {
+        // TODO: Write ease train speed function
+        ::state.trainSpeed = speed;
       }
 
-      void setTrainSpeed(unsigned long speed) {
-        trainMotor.writeMicroseconds(speed);
-        ::state.speed = speed;
-      }
-
-      void setTrainEncoder() {
-        encoderCount++;
+      void setTrainSpeed(int speed) {
+        // TODO: Write set train speed function
+        ::state.trainSpeed = speed;
       }
 
       #if ENABLE_DOORS
-        void openTrainDoors() {
+        void toggleTrainDoors() {
           if (::state.doorsOpen == 0) {
             for (int i = 0; i <= 95; i += 10) {
               doorServo.write(i);
               delay(250);
             }
             ::state.doorsOpen = 1;
-          }
-        }
-
-        void closeTrainDoors() {
-          if (::state.doorsOpen == 1) {
+          } else if (::state.doorsOpen == 1) {
             for (int i = 190; i >= 95; i -= 10) {
               doorServo.write(i);
               delay(250);
@@ -252,7 +209,9 @@ State state;
   */
   class Sensors {
     private:
-      // Amount of primary color detection from the sensed object
+      /*
+        Amount of color detected from sensed object by RGB/Color sensor
+      */
       typedef struct Color {
         int red;
         int green;
@@ -260,7 +219,9 @@ State state;
       } Color;
       Color color;
 
-      // Reads the Frequency of the respective colors 
+      /*
+        Frequency of colors detected from sensed object by RGB/Color sensor
+      */
       typedef struct Frequency {
         int red = 0;
         int green = 0;
@@ -268,7 +229,9 @@ State state;
       } Frequency;
       Frequency colorFrequency;
 
-      // Minimum and Maximum values for calibration
+      /*
+        Minimum & maximum of colors detected during calibration by RGB/Color sensor
+      */
       typedef struct Range {
         int redMin;
         int redMax;
@@ -289,13 +252,15 @@ State state;
         pinMode(RGB_S1, OUTPUT);
         pinMode(RGB_S2, OUTPUT);
         pinMode(RGB_S3, OUTPUT);
-        pinMode(13, OUTPUT); // TODO: Change for MEGA; only Tested for UNO
+
+        // TODO: Change for MEGA; only Tested for UNO
+        pinMode(13, OUTPUT); 
+
         pinMode(RGB_COLOROUT, INPUT);
       }
 
       #if DEBUG
         void calibrate() {
-          // Calibrate RGB sensor
           Serial.print("- Begin calibration for RGB sensor...");
 
           // Aiming at WHITE color
@@ -354,13 +319,12 @@ State state;
       #endif
 
       /*
-        Finalising the Color and returns the color as a char 
-        Color Codes 
-          r - Red 
-          g - Green
-          b - Blue
-          y - Yellow
-          n - None 
+        Determine which color is detected by RGB/Color sensor; returns:
+          r = Red 
+          g = Green
+          b = Blue
+          y = Yellow
+          n = None 
       */
       char detectedColor() {
         // Sensing Red Color
@@ -412,10 +376,12 @@ State state;
       }
 
       /*
-        Estimated velocity (or speed) detected via the Accelerometer
+        Determine whether movement is detected via the Accelerometer; returns:
+          0 = No movement
+          1 = Movement
       */
-      int detectedSpeed() {
-
+      int detectedMovement() {
+        // TODO: Write movement detection function
       }
   };
   Sensors sensors;
@@ -425,52 +391,113 @@ void setup() {
   Serial.begin(BAUD_RATE);
   Serial.println("Welcome to ENGG-METRO!");
 
+  #if ENABLE_COMMS
+    comms.BTSerial.begin(BAUD_RATE);
+    delay(2000);
+    Serial.println("AT+NAME=enggmetro");
+    delay(2000);
+    Serial.println("AT+PSWD=8080");
+    delay(2000);
+  #endif
+
   #if DEBUG
     Serial.println(" - Entered DEBUG mode");
-    comms.calibrate();
-    sensors.calibrate();
+    #if ENABLE_SENSORS
+      sensors.calibrate();
+    #endif
   #endif
 }
 
 void loop() {
-  char sensorsCommand = sensors.detectedColor();
-  if (sensorsCommand != 'n') {
-    state.enqueueCommand(sensorsCommand);
-  }
+  #if ENABLE_SENSORS
+    char sensorsCommand = sensors.detectedColor();
+    if (sensorsCommand != 'n') {
+      state.enqueueCommand(sensorsCommand);
+    }
+  #endif
 
-  char commsCommand = comms.receivedCommand();
-  if (commsCommand != 'n') {
-    state.enqueueCommand(commsCommand);
-  }
+  #if ENABLE_COMMS
+    char commsCommand = comms.receivedCommand();
+    if (commsCommand != 'n') {
+      state.enqueueCommand(commsCommand);
+    }
+  #endif
 
   if (state.commandQueueCount != 0) {
     switch (state.dequeueCommand()) {
       // Sensors & Comms: Stop train (such as at station)
       case 'r':
       case 's':
+        #if ENABLE_MOTORS
+          motors.easeTrainSpeed(0);
+        #endif
+        #if DEBUG
+          Serial.println(" - COMMAND: Stop train at station");
+        #endif
         break;
       
       // Sensors: Speed up or slow down
       case 'g':
+        #if ENABLE_MOTORS
+          if (state.trainSpeed == 2) {
+            motors.easeTrainSpeed(1);
+          } else if (state.trainSpeed == 1) {
+            motors.easeTrainSpeed(2);
+          }
+        #endif
+        #if DEBUG
+          Serial.println(" - COMMAND: Slow down or speed up");
+        #endif
         break;
       
       // Sensors & Comms: Emergency stop
       case 'b':
       case 'x':
-        motors.setTrainAcceleration(1500);
+        #if ENABLE_MOTORS
+          motors.setTrainSpeed(0);
+        #endif
+        #if DEBUG
+          Serial.println(" - COMMAND: Emergency stop");
+        #endif
         break;
 
       // Sensors & Comms: Change train direction
       case 'y':
       case 'c':
+        #if ENABLE_MOTORS
+          state.trainDirection = !state.trainDirection;
+          motors.easeTrainSpeed(state.trainSpeed);
+        #endif
+        #if DEBUG
+          Serial.println(" - COMMAND: Change train direction");
+        #endif
         break;
 
-      // Comms: Start train
+      // Comms: Start/Move train
       case 'm':
+        #if ENABLE_MOTORS
+          motors.easeTrainSpeed(1);
+        #endif
+        #if DEBUG
+          Serial.println(" - COMMAND: Start/Move train");
+        #endif
         break;
 
       // Comms: Open/Close doors
       case 'd':
+        #if ENABLE_MOTORS
+          motors.toggleTrainDoors();
+        #endif
+        #if DEBUG
+          Serial.println(" - COMMAND: Open/Close doors");
+        #endif
+        break;
+
+      default:
+        state.trainStatus = 3;
+        #if DEBUG
+          Serial.println(" - ERROR : COMMAND not recognised");
+        #endif
         break;
     }
   }
