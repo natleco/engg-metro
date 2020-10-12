@@ -18,6 +18,8 @@
 
 #define MOTOR_DOOR_PIN 8
 #define MOTOR_DRIVER_PIN 9
+#define MOTOR_DRIVER_MIN 600
+#define MOTOR_DRIVER_MAX 2400
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
 
@@ -56,7 +58,7 @@ class State {
     int trainSpeed = 0;
 
     #if ENABLE_DOORS
-      char doorsOpen = 0;
+      int doorsOpen = 0;
     #endif
 
     /*
@@ -109,11 +111,19 @@ State state;
       void sendData(char type, char data) {
         char message[10];
         snprintf(message, sizeof(message), "%s:%s_%s", ::state.trainStatus, type, data);
-        BTSerial.write("<");
-        delay(100);
-        BTSerial.write(message);
-        delay(100);
-        BTSerial.write(">");
+        #if DEBUG
+          Serial.write("<");
+          delay(100);
+          Serial.write(message);
+          delay(100);
+          Serial.write(">");
+        #else
+          BTSerial.write("<");
+          delay(100);
+          BTSerial.write(message);
+          delay(100);
+          BTSerial.write(">");
+        #endif
       }
 
       /*
@@ -127,16 +137,29 @@ State state;
       char receivedCommand() {
         char response;
         char command = 'n';
-        while (BTSerial.available()) {
-          response = BTSerial.read();
-          if (response != '<' && response != '>') {
-            command = response;
-            delay(100);
+        #if DEBUG
+          while (Serial.available()) {
+            response = Serial.read();
+            if (response != '<' && response != '>') {
+              command = response;
+              delay(100);
+            }
+            if (response == '>') {
+              break;
+            }
           }
-          if (response == '>') {
-            break;
+        #else
+          while (BTSerial.available()) {
+            response = BTSerial.read();
+            if (response != '<' && response != '>') {
+              command = response;
+              delay(100);
+            }
+            if (response == '>') {
+              break;
+            }
           }
-        }
+        #endif
         return command;
       }
   };
@@ -155,13 +178,12 @@ State state;
     private:
       Encoder trainEncoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
       int trainEncoderCount = 0;
-      Servo doorServo;
 
     public:
-      Motors() {
-        pinMode(MOTOR_DOOR_PIN, OUTPUT);
-        doorServo.attach(MOTOR_DOOR_PIN);
-      }
+      Servo trainMotor;
+      #if ENABLE_DOORS
+        Servo doorServo;
+      #endif
 
       /*
         Ease train into provided speed setting:
@@ -170,12 +192,37 @@ State state;
           2 = Normal speed
       */
       void easeTrainSpeed(int speed) {
-        // TODO: Write ease train speed function
+        // TODO: Write this for ease
         ::state.trainSpeed = speed;
       }
 
       void setTrainSpeed(int speed) {
-        // TODO: Write set train speed function
+        switch (speed) {
+          case 0:
+            trainMotor.writeMicroseconds(1500);
+            #if DEBUGf
+              Serial.println(" - SET TRAIN SPEED: Stop");
+            #endif
+            break;
+
+          case 1:
+            trainMotor.writeMicroseconds(::state.trainDirection 
+              ? 1500 + ((MOTOR_DRIVER_MAX - 1500) / 2) 
+              : MOTOR_DRIVER_MIN + ((1500 - MOTOR_DRIVER_MIN) / 2));
+            #if DEBUG
+              Serial.println(" - SET TRAIN SPEED: Slow");
+            #endif
+            break;
+
+          case 2:
+            trainMotor.writeMicroseconds(::state.trainDirection 
+              ? MOTOR_DRIVER_MAX 
+              : MOTOR_DRIVER_MIN);
+            #if DEBUG
+              Serial.println(" - SET TRAIN SPEED: Normal");
+            #endif
+            break;
+        }
         ::state.trainSpeed = speed;
       }
 
@@ -391,13 +438,22 @@ void setup() {
   Serial.begin(BAUD_RATE);
   Serial.println("Welcome to ENGG-METRO!");
 
-  #if ENABLE_COMMS
+  #if ENABLE_COMMS && !DEBUG
     comms.BTSerial.begin(BAUD_RATE);
     delay(2000);
     Serial.println("AT+NAME=enggmetro");
     delay(2000);
     Serial.println("AT+PSWD=8080");
     delay(2000);
+  #endif
+
+  #if ENABLE_MOTORS
+    #if ENABLE_DOORS
+      pinMode(MOTOR_DOOR_PIN, OUTPUT);
+      motors.doorServo.attach(MOTOR_DOOR_PIN);
+    #endif
+    pinMode(MOTOR_DRIVER_PIN, OUTPUT);
+    motors.trainMotor.attach(MOTOR_DRIVER_PIN, MOTOR_DRIVER_MIN, MOTOR_DRIVER_MAX);
   #endif
 
   #if DEBUG
@@ -424,7 +480,8 @@ void loop() {
   #endif
 
   if (state.commandQueueCount != 0) {
-    switch (state.dequeueCommand()) {
+    char command = state.dequeueCommand();
+    switch (command) {
       // Sensors & Comms: Stop train (such as at station)
       case 'r':
       case 's':
@@ -485,7 +542,7 @@ void loop() {
 
       // Comms: Open/Close doors
       case 'd':
-        #if ENABLE_MOTORS
+        #if ENABLE_MOTORS && ENABLE_DOORS
           motors.toggleTrainDoors();
         #endif
         #if DEBUG
@@ -494,10 +551,14 @@ void loop() {
         break;
 
       default:
-        state.trainStatus = 3;
-        #if DEBUG
-          Serial.println(" - ERROR : COMMAND not recognised");
-        #endif
+        if (command != 'r' || command != 's' || command != 'g'
+         || command != 'b' || command != 'x' || command != 'y'
+         || command != 'c' || command != 'm' || command != 'd') {
+          state.trainStatus = 3;
+          #if DEBUG
+            Serial.println(" - ERROR: COMMAND not recognised");
+          #endif
+        }
         break;
     }
   }
