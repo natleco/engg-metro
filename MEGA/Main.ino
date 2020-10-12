@@ -291,21 +291,6 @@ State state;
 
     public:
 
-      Sensors() {
-        // Get color range from EEPROM memory
-        EEPROM.get(0, colorRange);
-
-        pinMode(RGB_S0, OUTPUT);
-        pinMode(RGB_S1, OUTPUT);
-        pinMode(RGB_S2, OUTPUT);
-        pinMode(RGB_S3, OUTPUT);
-
-        // TODO: Change for MEGA; only Tested for UNO
-        pinMode(13, OUTPUT); 
-
-        pinMode(RGB_COLOROUT, INPUT);
-      }
-
       #if DEBUG
         void calibrate() {
           Serial.print("- Begin calibration for RGB sensor...");
@@ -445,6 +430,21 @@ void setup() {
     delay(2000);
     Serial.println("AT+PSWD=8080");
     delay(2000);
+  #endif
+
+  #if ENABLE_SENSORS
+    // Get color range from EEPROM memory
+    EEPROM.get(0, colorRange);
+
+    pinMode(RGB_S0, OUTPUT);
+    pinMode(RGB_S1, OUTPUT);
+    pinMode(RGB_S2, OUTPUT);
+    pinMode(RGB_S3, OUTPUT);
+
+    // TODO: Change for MEGA; only Tested for UNO
+    pinMode(13, OUTPUT); 
+
+    pinMode(RGB_COLOROUT, INPUT);
   #endif
 
   #if ENABLE_MOTORS
