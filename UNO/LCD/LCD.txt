@@ -1,0 +1,77 @@
+LCD screen specs:
+-LCM1602 LCD
+-16 characters 2 lines
+
+Pin Allocation on Uno:
+-pin A4: SDA - Serial Data
+-pin A5: SCL - Serial Clock
+
+
+Library installed and used:
+-LiquidCrystal_PCF8574 V1.2.0
+
+Things to display:
+                        1 1 1 1 1 1
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 
+
+0   C h a n g i n g   d i r e c t i
+1   1 1 3 . 2 0   m / s     E A S T
+
+
+Function
+function that is useful
+-LCD.autoscroll();
+-LCD.print("text");
+  // Funtions from reference:
+
+  void begin(int cols, int rows);
+
+  void init();
+
+  void home();
+  void setCursor(int col, int row);
+  void cursor();
+  void noCursor();
+  void blink();
+  void noBlink();
+  void display();
+  void noDisplay();
+  void scrollDisplayLeft();
+  void scrollDisplayRight();
+  void autoscroll();
+  void noAutoscroll();
+  void leftToRight();
+  void rightToLeft();
+  void createChar(int, byte[]);
+
+  // plus functions from LCDAPI:
+  void clear(); // same as init()
+  void setBacklight(int brightness);
+
+  // support of Print class
+  virtual size_t write(uint8_t ch);
+  using Print::write;
+
+
+Links
+See http://playground.arduino.cc/Main/I2cScanner how to test for a I2C device
+
+LiquidCrystal reference page:
+https://www.arduino.cc/en/Reference/LiquidCrystal
+
+writting a library: 
+https://www.arduino.cc/en/Hacking/libraryTutorial
+
+custom character: 
+https://lastminuteengineers.com/arduino-1602-character-lcd-tutorial/
+// also contains Custom character generator 
+// note: needs to cast the custom array as int[8] not as byte[8]. For some reason, it doesn't work in version 1.2.0 if u cast it as byte
+// note: char map is 5x8. i.e. 5 pixels across and 8 pixels down
+
+contains charmap 5x8 font:
+https://www.dafontfree.net/freefonts-5x8-lcd-hd44780u-a02-f91293.htm
+
+LCD effects:
+https://platformio.org/lib/show/1521/LcdEffects/examples
+// can make text bold, italic etc
+// note: it uses createChar() functin. Needs to modify to make it work 
