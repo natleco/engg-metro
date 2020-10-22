@@ -1,10 +1,12 @@
 /*
   LCM1602 Display with I2C module
 */
+#define bpin_estop 1
+#define bpin_changedir 2
+#define bpin_startstop 3
+#define bpin_doors 4
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
+
 #include <LiquidCrystal_PCF8574.h>
 #include <Wire.h>
 
@@ -23,17 +25,6 @@ enum button {
 };
 
 // ***** CUSTOM CHARACTER *****
-int heart[8] = { // needs to convert to int[] to make it work
-  B00000,
-  B01010,
-  B11111,
-  B11111,
-  B01110,
-  B00100,
-  B00000,
-  B00000
-};
-
 int minusOne[8] =
 {
   0b00010,
@@ -46,43 +37,7 @@ int minusOne[8] =
   0b00000
 };
 
-int smiley[8] =
-{
-  0b00000,
-  0b01010,
-  0b01010,
-  0b00000,
-  0b10001,
-  0b01110,
-  0b00000,
-  0b00000
-};
-
-int c1[8] =
-{
-  0b01010,
-  0b10101,
-  0b01010,
-  0b10101,
-  0b01010,
-  0b10101,
-  0b01010,
-  0b10101
-};
-
-int c2[8] =
-{
-  0b10101,
-  0b01010,
-  0b10101,
-  0b01010,
-  0b10101,
-  0b01010,
-  0b10101,
-  0b01010
-};
-
-int dd[8] =
+int doubleAngledBrackets[8] =
 {
   0b00000,
   0b00000,
@@ -94,7 +49,7 @@ int dd[8] =
   0b00000
 };
 
-int up[8] =
+int upArrow[8] =
 {
   0b00100,
   0b01110,
@@ -106,7 +61,7 @@ int up[8] =
   0b00100
 };
 
-int down[8] =
+int downArrow[8] =
 {
   0b00100,
   0b00100,
@@ -119,6 +74,41 @@ int down[8] =
 };
 // int myHeart[8] = {0, 10, 31, 31, 14, 4, 0, 0};
 
+class Button {
+  private:
+    uint8_t _buttonPin;
+    char _command;
+    button _btn;
+
+  public:
+    Button(uint8_t pin, char ch, button btn) : _buttonPin(pin), _command(ch), _btn(btn) {}
+
+    // Set pinMode for Button
+    void begin() {
+      pinMode(_buttonPin, INPUT);
+    }
+
+    // Function to check if Button is released
+    bool isPressed() {
+      int buttonState = digitalRead(_buttonPin);
+      if (buttonState == HIGH) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    button getEnumType() {
+      return _btn;
+    }
+
+    char getCharCommand() {
+      return _command;
+    }
+
+    String 
+};
+
 // ***** GLOBAL VARIABLES AND CONFIGS *****
 // **** velocity display configs ****
 const int v_lenIncDecimalPoint = 5;
@@ -128,24 +118,28 @@ char v_outStr[8];
 // **** direction ****
 traindirection dir = unknown;
 
-// **** gif toggle ****
-int c = 1;
-
 // **** scrolling text variables ****
 int ls_startIndex = 16;
 int ls_endIndex = 0;
 int rs_endIndex  = -1;
 int rs_startIndex = -1;
 
+// **** buttons ****
+Button b_estop(bpin_estop, 'x', estop);
+Button b_changedir(bpin_changedir, 'c', changedir);
+Button b_startstop(bpin_startstop, 's', togglestartstop);
+Button b_doors(bpin_doors, 'd', toggledoors);
+//
+
+// **** LCD ****
 LiquidCrystal_PCF8574 lcd(0x27); // Set the lcd address to 0x27 for a 16 chars and 2 line display
-// LiquidCrystal_PCF8574 LCD(0x27, 16, 2);
 // Try I2C address of 0x3f or 0x20 if 0x27 does not work
 
 
 void setup() {
-  // Connect to LCD
+  // Check and connect to LCD. 
   int error;
-
+  
   Serial.begin(115200);
   Serial.println("lcd...");
 
@@ -168,19 +162,19 @@ void setup() {
   }
 
   // Create custom characters
-  lcd.createChar(0, heart);
   lcd.createChar(1, minusOne);
-  lcd.createChar(2, smiley);
-  lcd.createChar(3, c1);
-  lcd.createChar(4, c2);
-  lcd.createChar(5, dd);
-  lcd.createChar(6, down);
-  lcd.createChar(7, up);
-
-  // Set configs for buttons
+  lcd.createChar(2, doubleAngledBrackets);
+  lcd.createChar(3, upArrow);
+  lcd.createChar(4, downArrow);
+  
+  // Initalise buttons
+  b_estop.begin();
+  b_changedir.begin();
+  b_startstop.begin();
+  b_doors.begin();
 
   // Set configs for lcd
-  lcd.setBacklight(255);
+  lcd.setBacklight(255); // Set LCD's brightness 
 
   // Show start up message
   lcd.setCursor(0, 0);
@@ -194,21 +188,27 @@ void setup() {
   }
   delay(500);
   lcd.clear();
+
+  
 }
 
 void loop() {
+  
+
+  
   // First line
   lcd.setCursor(0, 0);
   //displayCustomCharsOne();
   //scrollLeft(buttonToString(randomiseButtonPressed()));
-  lcd.print(scrollRight("Demo: " + String("\2")+ "~ Scrolling single row only ~" + String("\5\6\7") + "  The quick brown fox jumps over the lazy dog"));
+  lcd.print(scrollLeft("Demo: " + String("\2") + "~ Scrolling single row only ~" + String("\3\4\2") + "  The quick brown fox jumps over the lazy dog"));
+  for
+
+  
   // Second line
   displayVelocity();
   displayUnit();
   displayDirection();
   delay(500);
-
-  c = (c + 1) % 2;
 }
 
 
@@ -291,25 +291,14 @@ void displayVelocity() {
 void displayUnit() {
   // Print unit "m/s" or "ms-1" custom char
   lcd.setCursor(7, 1);
-  //lcd.print(" m/s");
   lcd.print(" ms");
   lcd.setCursor(10, 1);
-  lcd.write(byte(1)); // Custom char minusOne
+  lcd.write(byte(1)); // Write minusOne character to lcd
 }
 
 void displayDirection() {
   lcd.setCursor(12, 1);
   lcd.print(trainDirToString(randomiseDirection()));
-}
-
-void displayCustomCharsOne() {
-  lcd.write(byte(0));
-  lcd.write(byte(5));
-  lcd.write(byte(2));
-  lcd.write(byte(c + 3));
-  lcd.write(byte(4 - c));
-  lcd.write(byte(c + 6));
-  lcd.write(byte(7 - c));
 }
 
 String scrollLeft(String text) {
@@ -342,12 +331,12 @@ String scrollRight(String text) {
     rs_startIndex = rs_endIndex  - 16;
   }
   // Extract whatever is needed for display and increment startIndex and endIndex by one
-  str = strPadded.substring(rs_startIndex--, rs_endIndex --);
+  str = strPadded.substring(rs_startIndex--, rs_endIndex--);
 
   return str;
 }
 
 void resetRightScrollIndexes() {
-    rs_endIndex  = -1;
-    rs_startIndex = -1;
+  rs_endIndex  = -1;
+  rs_startIndex = -1;
 }
