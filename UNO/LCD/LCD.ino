@@ -105,8 +105,7 @@ class Button {
     char getCharCommand() {
       return _command;
     }
-
-    String 
+ 
 };
 
 // ***** GLOBAL VARIABLES AND CONFIGS *****
@@ -201,8 +200,7 @@ void loop() {
   //displayCustomCharsOne();
   //scrollLeft(buttonToString(randomiseButtonPressed()));
   lcd.print(scrollLeft("Demo: " + String("\2") + "~ Scrolling single row only ~" + String("\3\4\2") + "  The quick brown fox jumps over the lazy dog"));
-  for
-
+  
   
   // Second line
   displayVelocity();
