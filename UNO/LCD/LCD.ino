@@ -192,9 +192,6 @@ void setup() {
 }
 
 void loop() {
-  
-
-  
   // First line
   lcd.setCursor(0, 0);
   //displayCustomCharsOne();
@@ -280,9 +277,9 @@ String displayButtonPressed() {
 
 void displayVelocity() {
   lcd.setCursor(0, 1);
-  lcd.write(byte(5));
+  lcd.write(byte(2)); // Write doubleAngledBrackets character to lcd
   //dtostrf(velocity, v_lenIncDecimalPoint, v_numDigsAfterDecimal, v_outStr); // Format the velocity
-  dtostrf(randomiseFloat(), v_lenIncDecimalPoint, v_numDigsAfterDecimal, v_outStr);
+  dtostrf(randomiseFloat(), v_lenIncDecimalPoint, v_numDigsAfterDecimal, v_outStr); 
   lcd.print(v_outStr);
 }
 
@@ -318,7 +315,6 @@ void resetLeftScrollIndexes() {
   ls_startIndex = 16;
   ls_endIndex = 0;
 }
-
 
 String scrollRight(String text) {
   String str;
