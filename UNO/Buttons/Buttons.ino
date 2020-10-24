@@ -51,25 +51,24 @@ Button b_doors(bpin_doors, 'd', bname_doors);
 Button btns[] = {b_estop, b_changedir, b_startstop, b_doors};
 
 void setup() {
-  // Initalise buttons
-  b_estop.isPressed();
-  b_changedir.isPressed();
-  b_startstop.isPressed();
-  b_doors.isPressed();
+  // Initalise pinMode for buttons
+  b_estop.begin();
+  b_changedir.begin();
+  b_startstop.begin();
+  b_doors.begin();
 }
 
 void loop() {
-  checkButtonPresses(btns);
-
-}
-
-int checkButtonPresses(Button btn[]){
-  int n = 0;
   if(b_estop.isPressed()){
-    n++;
+    // send b_estop.getCommand() command to mega
   }
-  b_changedir.isPressed();
-  b_startstop.isPressed();
-  b_doors.isPressed();
-  return n;
+  if(b_changedir.isPressed()){
+    // send b_changedir.getCommand() command to mega
+  }
+  if(b_startstop.isPressed()){
+    // send b_startstop.getCommand() command to mega
+  }
+  if(b_doors.isPressed()){
+    // send b_doors.getCommand() command to mega
+  }
 }
