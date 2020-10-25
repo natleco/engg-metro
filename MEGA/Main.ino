@@ -6,7 +6,7 @@
 
 #define DEBUG 1
 #define ENABLE_SENSORS 1
-#define ENABLE_MOTORS 1
+#define ENABLE_MOTORS 0
 #define ENABLE_COMMS 1
 #define ENABLE_DOORS 1
 
@@ -18,6 +18,8 @@
 
 #define MOTOR_DOOR_PIN 8
 #define MOTOR_DRIVER_PIN 9
+#define MOTOR_DRIVER_MIN 600
+#define MOTOR_DRIVER_MAX 2400
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
 
@@ -46,17 +48,20 @@ class State {
     int trainDirection = 0;
 
     /*
-      Speed of train; values include:
+      State of train speed; values include:
         0 = No movement (stopped)
         1 = Slow speed
         2 = Normal speed
-      
-      TODO: Use more accurate speed values
     */
-    int trainSpeed = 0;
+    int trainSpeedState = 0;
+
+    /*
+      Actual speed of train in RPM
+    */
+    float trainSpeed = 0;
 
     #if ENABLE_DOORS
-      char doorsOpen = 0;
+      int doorsOpen = 0;
     #endif
 
     /*
@@ -96,24 +101,32 @@ class State {
 State state;
 
 #if ENABLE_COMMS
-  #include <SoftwareSerial.h>
+  #include <AltSoftSerial.h>
 
   class Comms {
     public:
-      SoftwareSerial BTSerial = SoftwareSerial(BT_RX_PIN, BT_TX_PIN);
+      AltSoftSerial BTSerial;
 
       /*
         Send data over Comms link; data is sent in this format: 
-          < status code (0-9) : data type (a = acceleration, d = direction, s = station) _ data >
+          < status code (0-9) : data type (a = acceleration, d = direction) _ data >
       */
       void sendData(char type, char data) {
         char message[10];
         snprintf(message, sizeof(message), "%s:%s_%s", ::state.trainStatus, type, data);
-        BTSerial.write("<");
-        delay(100);
-        BTSerial.write(message);
-        delay(100);
-        BTSerial.write(">");
+        #if DEBUG
+          Serial.write("<");
+          delay(100);
+          Serial.write(message);
+          delay(100);
+          Serial.write(">");
+        #else
+          BTSerial.write("<");
+          delay(100);
+          BTSerial.write(message);
+          delay(100);
+          BTSerial.write(">");
+        #endif
       }
 
       /*
@@ -127,16 +140,29 @@ State state;
       char receivedCommand() {
         char response;
         char command = 'n';
-        while (BTSerial.available()) {
-          response = BTSerial.read();
-          if (response != '<' && response != '>') {
-            command = response;
-            delay(100);
+        #if DEBUG
+          while (Serial.available()) {
+            response = Serial.read();
+            if (response != '<' && response != '>') {
+              command = response;
+              delay(100);
+            }
+            if (response == '>') {
+              break;
+            }
           }
-          if (response == '>') {
-            break;
+        #else
+          while (BTSerial.available()) {
+            response = BTSerial.read();
+            if (response != '<' && response != '>') {
+              command = response;
+              delay(100);
+            }
+            if (response == '>') {
+              break;
+            }
           }
-        }
+        #endif
         return command;
       }
   };
@@ -146,37 +172,90 @@ State state;
 #if ENABLE_MOTORS
   #include <Servo.h>
   #include <Encoder.h>
+  #include <PID_v1.h>
 
   /* 
     Motor Driver: REV Robotics SPARK Motor Controller
     Motor: NeveRest Classic 60 Gearmotor
   */
   class Motors {
-    private:
-      Encoder trainEncoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
-      int trainEncoderCount = 0;
-      Servo doorServo;
-
     public:
-      Motors() {
-        pinMode(MOTOR_DOOR_PIN, OUTPUT);
-        doorServo.attach(MOTOR_DOOR_PIN);
-      }
+      
+      /*
+        DC motor which controls train movement
+      */
+      Servo trainMotor;
 
       /*
-        Ease train into provided speed setting:
+        Encoder built-into DC motor to calculate velocity
+      */
+      Encoder trainEncoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
+      volatile unsigned long trainEncoderCount, trainEncoderCountOld, trainEncoderCountNew = 0;
+ 
+      /*
+        Create PID instance to maintain speed (kinda like cruise-control)
+      */
+      double kp = 0, ki = 10, kd = 0, input = 0, output = 0, setpoint = 0;
+      PID trainPID = PID(&input, &output, &setpoint, kp, ki, kd, DIRECT);
+
+      #if ENABLE_DOORS
+        /*
+          Servo which controls train doors movement
+        */
+        Servo doorServo;
+      #endif
+
+      /*
+        Set train into provided speed setting:
           0 = No movement (stopped)
           1 = Slow speed
           2 = Normal speed
       */
-      void easeTrainSpeed(int speed) {
-        // TODO: Write ease train speed function
-        ::state.trainSpeed = speed;
+      void setTrainSpeedState(int state) {
+        int startMicroseconds = 1500;
+        
+        if (::state.trainSpeedState == 1) {
+          startMicroseconds = ::state.trainDirection
+            ? 1500 + ((MOTOR_DRIVER_MAX - 1500) / 2) 
+            : MOTOR_DRIVER_MIN + ((1500 - MOTOR_DRIVER_MIN) / 2);
+
+        } else if (::state.trainSpeedState == 2) {
+          startMicroseconds = ::state.trainDirection 
+            ? MOTOR_DRIVER_MAX 
+            : MOTOR_DRIVER_MIN;
+        }
+
+        switch (state) {
+          case 0:
+            trainMotor.writeMicroseconds(1500);
+            #if DEBUG
+              Serial.println(" - SET TRAIN SPEED: Stop");
+            #endif
+            break;
+
+          case 1:
+            trainMotor.writeMicroseconds(::state.trainDirection
+              ? 1500 + ((MOTOR_DRIVER_MAX - 1500) / 2) 
+              : MOTOR_DRIVER_MIN + ((1500 - MOTOR_DRIVER_MIN) / 2));
+            #if DEBUG
+              Serial.println(" - SET TRAIN SPEED: Slow");
+            #endif
+            break;
+
+          case 2:
+            trainMotor.writeMicroseconds(::state.trainDirection 
+              ? MOTOR_DRIVER_MAX 
+              : MOTOR_DRIVER_MIN);
+            #if DEBUG
+              Serial.println(" - SET TRAIN SPEED: Normal");
+            #endif
+            break;
+        }
+        ::state.trainSpeedState = state;
       }
 
-      void setTrainSpeed(int speed) {
-        // TODO: Write set train speed function
-        ::state.trainSpeed = speed;
+      void trainEncoderCountEvent() {
+        trainEncoderCount += digitalRead(ENCODER_PIN_B) == HIGH ? 1 : -1;
       }
 
       #if ENABLE_DOORS
@@ -201,14 +280,13 @@ State state;
 #endif
 
 #if ENABLE_SENSORS
-  #include <EEPROM.h>
-
   /* 
     RGB Sensor: XC3708
     Accelerometer Sensor: MPU6050
   */
   class Sensors {
-    private:
+    public:
+
       /*
         Amount of color detected from sensed object by RGB/Color sensor
       */
@@ -242,30 +320,13 @@ State state;
       } Range;
       Range colorRange;
 
-    public:
-
-      Sensors() {
-        // Get color range from EEPROM memory
-        EEPROM.get(0, colorRange);
-
-        pinMode(RGB_S0, OUTPUT);
-        pinMode(RGB_S1, OUTPUT);
-        pinMode(RGB_S2, OUTPUT);
-        pinMode(RGB_S3, OUTPUT);
-
-        // TODO: Change for MEGA; only Tested for UNO
-        pinMode(13, OUTPUT); 
-
-        pinMode(RGB_COLOROUT, INPUT);
-      }
-
       #if DEBUG
         void calibrate() {
           Serial.print("- Begin calibration for RGB sensor...");
 
           // Aiming at WHITE color
           Serial.println("- RGB sensor calibrating - Min range...");
-          Serial.println("- Detected color: WHITE");
+          Serial.println("- Begin calibrating color: WHITE");
 
           // Setting calibration values - Min range
           digitalWrite(13, HIGH);
@@ -287,9 +348,9 @@ State state;
 
           // Aiming at BLACK color
           Serial.println("- RGB sensor calibrating - Max range...");
+          Serial.println("- Begin calibrating color: BLACK");
           digitalWrite(13, LOW);
           delay(2000);
-          Serial.println("- Detected color: BLACK");
 
           // Setting calibration values - Max range
           digitalWrite(13, LOW);
@@ -309,12 +370,8 @@ State state;
           Serial.println("- RGB sensor calibration COMPLETE!");
           digitalWrite(13, LOW);
 
-          // Save color range to EEPROM memory
-          EEPROM.put(0, colorRange);
-
           // Calibrate Accelerometer sensor
           Serial.print("- Begin calibration for Accelerometer sensor...");
-
         }
       #endif
 
@@ -324,7 +381,7 @@ State state;
           g = Green
           b = Blue
           y = Yellow
-          n = None 
+          n = None
       */
       char detectedColor() {
         // Sensing Red Color
@@ -391,13 +448,40 @@ void setup() {
   Serial.begin(BAUD_RATE);
   Serial.println("Welcome to ENGG-METRO!");
 
-  #if ENABLE_COMMS
+  #if ENABLE_COMMS && !DEBUG
+    // Init Bluetooth Comms link
     comms.BTSerial.begin(BAUD_RATE);
-    delay(2000);
-    Serial.println("AT+NAME=enggmetro");
-    delay(2000);
-    Serial.println("AT+PSWD=8080");
-    delay(2000);
+  #endif
+
+  #if ENABLE_SENSORS
+    // Init RGB Sensors
+    pinMode(RGB_S0, OUTPUT);
+    pinMode(RGB_S1, OUTPUT);
+    pinMode(RGB_S2, OUTPUT);
+    pinMode(RGB_S3, OUTPUT);
+    digitalWrite(RGB_S0, HIGH);
+    digitalWrite(RGB_S1, LOW);
+    pinMode(RGB_COLOROUT, INPUT);
+  #endif
+
+  #if ENABLE_MOTORS
+
+    #if ENABLE_DOORS
+      // Init Servo for doors
+      pinMode(MOTOR_DOOR_PIN, OUTPUT);
+      motors.doorServo.attach(MOTOR_DOOR_PIN);
+    #endif
+
+    // Init DC Motor for drive
+    pinMode(MOTOR_DRIVER_PIN, OUTPUT);
+    motors.trainMotor.attach(MOTOR_DRIVER_PIN, MOTOR_DRIVER_MIN, MOTOR_DRIVER_MAX);
+
+    // Init PID
+    motors.trainPID.SetMode(AUTOMATIC);
+    motors.trainPID.SetTunings(motors.kp, motors.ki, motors.kd);
+
+    // Init Encoder
+    attachInterrupt(0, trainEncoderCountEvent, CHANGE);
   #endif
 
   #if DEBUG
@@ -407,6 +491,15 @@ void setup() {
     #endif
   #endif
 }
+
+#if ENABLE_MOTORS
+  /*
+    Train encoder event for interrupt call
+  */
+  void trainEncoderCountEvent() {
+    motors.trainEncoderCountEvent();
+  }
+#endif
 
 void loop() {
   #if ENABLE_SENSORS
@@ -424,12 +517,13 @@ void loop() {
   #endif
 
   if (state.commandQueueCount != 0) {
-    switch (state.dequeueCommand()) {
+    char command = state.dequeueCommand();
+    switch (command) {
       // Sensors & Comms: Stop train (such as at station)
       case 'r':
       case 's':
         #if ENABLE_MOTORS
-          motors.easeTrainSpeed(0);
+          motors.setTrainSpeedState(0);
         #endif
         #if DEBUG
           Serial.println(" - COMMAND: Stop train at station");
@@ -439,10 +533,10 @@ void loop() {
       // Sensors: Speed up or slow down
       case 'g':
         #if ENABLE_MOTORS
-          if (state.trainSpeed == 2) {
-            motors.easeTrainSpeed(1);
-          } else if (state.trainSpeed == 1) {
-            motors.easeTrainSpeed(2);
+          if (state.trainSpeedState == 2) {
+            motors.setTrainSpeedState(1);
+          } else if (state.trainSpeedState == 1) {
+            motors.setTrainSpeedState(2);
           }
         #endif
         #if DEBUG
@@ -454,7 +548,7 @@ void loop() {
       case 'b':
       case 'x':
         #if ENABLE_MOTORS
-          motors.setTrainSpeed(0);
+          motors.setTrainSpeedState(0);
         #endif
         #if DEBUG
           Serial.println(" - COMMAND: Emergency stop");
@@ -466,7 +560,8 @@ void loop() {
       case 'c':
         #if ENABLE_MOTORS
           state.trainDirection = !state.trainDirection;
-          motors.easeTrainSpeed(state.trainSpeed);
+          motors.setTrainSpeedState(state.trainSpeedState);
+          comms.sendData('d', state.trainDirection);
         #endif
         #if DEBUG
           Serial.println(" - COMMAND: Change train direction");
@@ -476,7 +571,7 @@ void loop() {
       // Comms: Start/Move train
       case 'm':
         #if ENABLE_MOTORS
-          motors.easeTrainSpeed(1);
+          motors.setTrainSpeedState(1);
         #endif
         #if DEBUG
           Serial.println(" - COMMAND: Start/Move train");
@@ -485,20 +580,20 @@ void loop() {
 
       // Comms: Open/Close doors
       case 'd':
-        #if ENABLE_MOTORS
+        #if ENABLE_MOTORS && ENABLE_DOORS
           motors.toggleTrainDoors();
         #endif
         #if DEBUG
           Serial.println(" - COMMAND: Open/Close doors");
         #endif
         break;
-
-      default:
-        state.trainStatus = 3;
-        #if DEBUG
-          Serial.println(" - ERROR : COMMAND not recognised");
-        #endif
-        break;
     }
   }
+
+  #if ENABLE_MOTORS
+    motors.input = motors.trainEncoderCount;
+    motors.trainPID.Compute();
+    // delay(1000);
+    // comms.sendData('s', state.trainSpeed);
+  #endif
 }
