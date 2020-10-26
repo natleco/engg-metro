@@ -298,94 +298,6 @@ State state;
       Color color;
 
       /*
-        Frequency of colors detected from sensed object by RGB/Color sensor
-      */
-      typedef struct Frequency {
-        int red = 0;
-        int green = 0;
-        int blue = 0;
-      } Frequency;
-      Frequency colorFrequency;
-
-      /*
-        Minimum & maximum of colors detected during calibration by RGB/Color sensor
-      */
-      typedef struct Range {
-        int redMin;
-        int redMax;
-        int greenMin;
-        int greenMax;
-        int blueMin;
-        int blueMax;
-      } Range;
-      Range colorRange;
-
-      #if DEBUG
-        void calibrate() {
-          Serial.println("- Begin calibration for RGB sensor...");
-
-          // Aiming at WHITE color
-          Serial.println("- Begin calibrating color: WHITE");
-
-          // Setting calibration values - Min range
-          digitalWrite(13, HIGH);
-          delay(5000);
-          Serial.println("- RGB sensor calibrating - Min range...");
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, LOW);
-          colorRange.redMin = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          digitalWrite(RGB_S2, HIGH);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.greenMin = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.blueMin = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          #if DEBUG
-            char colorValuesWhite[128];
-            snprintf(colorValuesWhite, sizeof(colorValuesWhite), "-- Min range colors: rgb(%i, %i, %i)", colorRange.redMin, colorRange.greenMin, colorRange.blueMin);
-            Serial.println(colorValuesWhite);
-          #endif
-
-          // Aiming at BLACK color
-          Serial.println("- Begin calibrating color: BLACK");
-          digitalWrite(13, LOW);
-          delay(2000);
-
-          // Setting calibration values - Max range
-          digitalWrite(13, LOW);
-          delay(5000);
-          Serial.println("- RGB sensor calibrating - Max range...");
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, LOW);
-          colorRange.redMax = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-          digitalWrite(RGB_S2, HIGH);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.greenMax = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.blueMax = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          #if DEBUG
-            char colorValuesBlack[128];
-            snprintf(colorValuesBlack, sizeof(colorValuesBlack), "-- Max range colors: rgb(%i, %i, %i)", colorRange.redMax, colorRange.greenMax, colorRange.blueMax);
-            Serial.println(colorValuesBlack);
-          #endif
-
-          Serial.println("- RGB sensor calibration COMPLETE!");
-          digitalWrite(13, LOW);
-        }
-      #endif
-
-      /*
         Determine which color is detected by RGB/Color sensor; returns:
           r = Red 
           g = Green
@@ -394,62 +306,42 @@ State state;
           n = None
       */
       char detectedColor() {
-        // Sensing Red Color
+        // Detect RED
         digitalWrite(RGB_S2, LOW);
         digitalWrite(RGB_S3, LOW);
-        colorFrequency.red = pulseIn(RGB_COLOROUT, LOW);
-        color.red = map(colorFrequency.red, colorRange.redMin, colorRange.redMax, 255, 0);
-        delay(100);
+        color.red = pulseIn(RGB_COLOROUT, LOW);
+        delay(50);
 
-        // Sensing Green Color
+        // Detect GREEN
         digitalWrite(RGB_S2, HIGH);
         digitalWrite(RGB_S3, HIGH);
-        colorFrequency.green = pulseIn(RGB_COLOROUT, LOW);
-        color.green = map(colorFrequency.green, colorRange.greenMin, colorRange.greenMax, 255, 0);
-        delay(100);
+        color.green = pulseIn(RGB_COLOROUT, LOW);
+        delay(50);
 
-        // Sensing Blue Color
+        // Detect BLUE
         digitalWrite(RGB_S2, LOW);
         digitalWrite(RGB_S3, HIGH);
-        colorFrequency.blue = pulseIn(RGB_COLOROUT, LOW);
-        color.blue = map(colorFrequency.blue, colorRange.blueMin, colorRange.blueMax, 255, 0);
-        delay(100);
-
-        // Limit the range for each color
-        color.red = constrain(color.red, 0, 255);
-        color.green = constrain(color.green, 0, 255);
-        color.blue = constrain(color.blue, 0, 255);
-
-        // Identifying the brightest color
-        int maxVal = max(color.red, color.blue);
-        maxVal = max(maxVal, color.green);
-        
-        // Map new color values
-        color.red = map(color.red, 0, maxVal, 0, 255);
-        color.green = map(color.green, 0, maxVal, 0, 255);
-        color.blue = map(color.blue, 0, maxVal, 0, 255);
-
-        delay(1000);
+        color.blue = pulseIn(RGB_COLOROUT, LOW);
+        delay(50);
 
         #if DEBUG
           char colorValues[128];
           snprintf(colorValues, sizeof(colorValues), "--- Detected colors: rgb(%i, %i, %i)", color.red, color.green, color.blue);
           Serial.println(colorValues);
-          delay(500);
         #endif
 
         // Determine which color is most likely detected
-        if (color.red > 250 && color.green < 200 && color.blue < 200) {
+        if (color.red > 12 && color.red < 30 && color.green > 40 && color.green < 70 && color.blue > 33 && color.blue < 70) {
           return 'r'; // Red
-        } else if (color.red < 200 && color.green > 250 && color.blue < 200) {
+        } else if (color.red > 50 && color.red < 95 && color.green > 35 && color.green < 70 && color.blue > 45 && color.blue < 85) {
           return 'g'; // Green
-        } else if (color.red < 200 && color.blue > 250) {
+        } else if (color.red > 65 && color.red < 125 && color.green > 65 && color.green < 115 && color.blue > 32 && color.blue < 65) {
           return 'b'; // Blue
-        } else if (color.red > 225 && color.green > 200 && color.blue < 100) {
+        } else if (color.red > 10 && color.red < 20 && color.green > 10 && color.green < 25 && color.blue > 20 && color.blue < 38) {
           return 'y'; // Yellow
         }
 
-        return 'n'; // No color
+        return 'n'; // None
       }
 
       /*
@@ -506,9 +398,6 @@ void setup() {
 
   #if DEBUG
     Serial.println(" - Entered DEBUG mode");
-    #if ENABLE_SENSORS
-      sensors.calibrate();
-    #endif
   #endif
 }
 
