@@ -74,7 +74,7 @@ TrainStatus trainStatus;
 void setup() {
   while (!Serial);
   Serial.begin(9600);
-  BTserial.begin(9600);
+  BTserial.begin(19200);
   Serial.println("BTserial started at 9600");
   setup_lcd();
 }
@@ -91,6 +91,7 @@ void loop() {
     if (c != 10 & c != 13 )
     {
       BTserial.write(c);
+      Serial.write(c);
     }
 
     // Echo the user input to the main window.
@@ -98,7 +99,7 @@ void loop() {
     if (NL) {
       NL = false;
     }
-    Serial.write(c);
+//    Serial.print(c);
     if (c == 10) {
       NL = true;
     }
