@@ -23,11 +23,23 @@
 /*
   LCM1602 Display with I2C module
 */
+// Button pins
 #define bpin_estop 1
 #define bpin_changedir 2
 #define bpin_startstop 3
 #define bpin_doors 4
 
+const String bname_estop = "Emergency Stop";
+const String bname_changedir = "Change Direction";
+const String bname_startstop = "Start/Stop Train";
+const String bname_doors = "Opening/Closing Doors";
+
+// **** buttons ****
+Button b_estop(bpin_estop, 'x',  bname_estop);
+Button b_changedir(bpin_changedir, 'c', bname_changedir);
+Button b_startstop(bpin_startstop, 's', bname_startstop);
+Button b_doors(bpin_doors, 'd', bname_doors);
+//
 
 // ***** CUSTOM CHARACTER *****
 int minusOne[8] = { 0b00010, 0b00110, 0b11010, 0b00010, 0b00111, 0b00000, 0b00000, 0b00000 };
@@ -51,13 +63,6 @@ int ls_endIndex = 0;
 int rs_endIndex  = -1;
 int rs_startIndex = -1;
 
-// **** buttons ****
-Button b_estop(bpin_estop, 'x', estop);
-Button b_changedir(bpin_changedir, 'c', changedir);
-Button b_startstop(bpin_startstop, 's', togglestartstop);
-Button b_doors(bpin_doors, 'd', toggledoors);
-//
-
 // **** LCD ****
 LiquidCrystal_PCF8574 lcd(0x27); // Set the lcd address to 0x27 for a 16 chars and 2 line display
 // Try I2C address of 0x3f or 0x20 if 0x27 does not work
@@ -74,7 +79,7 @@ TrainStatus trainStatus;
 void setup() {
   while (!Serial);
   Serial.begin(9600);
-  BTserial.begin(19200);
+  BTserial.begin(9600);
   Serial.println("BTserial started at 9600");
   setup_lcd();
 }
@@ -148,11 +153,11 @@ void setup_lcd() {
   lcd.createChar(3, upArrow);
   lcd.createChar(4, downArrow);
   
-  // Initalise buttons
-  b_estop.begin();
-  b_changedir.begin();
-  b_startstop.begin();
-  b_doors.begin();
+// Initalise buttons- TODO remove if constructor works
+//  b_estop.begin();
+//  b_changedir.begin();
+//  b_startstop.begin();
+//  b_doors.begin();
 
   // Set configs for lcd
   lcd.setBacklight(255); // Set LCD's brightness 
@@ -183,20 +188,18 @@ void loop_lcd() {
   delay(500);
 }
 
-ControlBoxButton randomiseButtonPressed() {
+String randomiseButtonPressed() {
   int i = rand() % 4;
-  ControlBoxButton btn;
 
   if (i < 0) {
-    btn = estop;
+    return b_estop.getButtonName();
   } else if (i < 1) {
-    btn = changedir;
+    return b_changedir.getButtonName();
   } else if (i < 2) {
-    btn = toggledoors;
+    return b_startstop.getButtonName();
   } else {
-    btn = togglestartstop;
+    return b_doors.getButtonName();
   }
-  return btn;
 }
 
 float randomiseFloat() {
@@ -217,11 +220,9 @@ String buttonToString(ControlBoxButton btn) {
 }
 
 // **** print to LCD funcs ****
-String displayButtonPressed() {
+void displayButtonPressed() {
   lcd.setCursor(0, 0); // First line
-  String btnPressed = buttonToString(randomiseButtonPressed());
-  lcd.print(btnPressed);
-  return btnPressed;
+  lcd.print(randomiseButtonPressed());
 }
 
 void displayVelocity(double speed) {

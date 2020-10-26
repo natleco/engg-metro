@@ -2,8 +2,7 @@
 #include "Button.h"
 #include "ControlBoxButton.h"
 
-Button::Button(uint8_t pin, char ch, ControlBoxButton btn) : _buttonPin(pin), _command(ch), _btn(btn) { }
-
+Button::Button(uint8_t pin, char ch, String btn) : _buttonPin(pin), _command(ch), _btn(btn) { begin(); }
 // Set pinMode for Button
 void Button::begin() {
   pinMode(_buttonPin, INPUT);
@@ -19,10 +18,10 @@ bool Button::isPressed() {
   }
 }
 
-ControlBoxButton Button::getEnumType() {
+String Button::getButtonName() {
   return _btn;
 }
 
-char Button::getCharCommand() {
+char Button::getCommand() {
   return _command;
 }

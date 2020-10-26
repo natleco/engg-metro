@@ -6,13 +6,13 @@ class Button {
   private:
     uint8_t _buttonPin;
     char _command;
-    ControlBoxButton _btn;
+    String _btn;
 
   public:
-    Button(uint8_t pin, char ch, ControlBoxButton btn);
+    Button(uint8_t pin, char ch, String btn);
     void begin();
     bool isPressed();
-    ControlBoxButton getEnumType();
-    char getCharCommand();
+    String getButtonName();
+    char getCommand();
 };
 #endif
