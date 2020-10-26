@@ -324,8 +324,8 @@ State state;
         void calibrate() {
           Serial.println("- Begin calibration for RGB sensor...");
 
-          // Aiming at BLACK color
-          Serial.println("- Begin calibrating color: BLACK");
+          // Aiming at WHITE color
+          Serial.println("- Begin calibrating color: WHITE");
 
           // Setting calibration values - Min range
           digitalWrite(13, HIGH);
@@ -347,13 +347,13 @@ State state;
           delay(100);
 
           #if DEBUG
-            char colorValuesBlack[128];
-            snprintf(colorValuesBlack, sizeof(colorValuesBlack), "- Min range colors: rgb(%i, %i, %i)", colorRange.redMin, colorRange.greenMin, colorRange.blueMin);
-            Serial.println(colorValuesBlack);
+            char colorValuesWhite[128];
+            snprintf(colorValuesWhite, sizeof(colorValuesWhite), "-- Min range colors: rgb(%i, %i, %i)", colorRange.redMin, colorRange.greenMin, colorRange.blueMin);
+            Serial.println(colorValuesWhite);
           #endif
 
-          // Aiming at WHITE color
-          Serial.println("- Begin calibrating color: WHITE");
+          // Aiming at BLACK color
+          Serial.println("- Begin calibrating color: BLACK");
           digitalWrite(13, LOW);
           delay(2000);
 
@@ -375,9 +375,9 @@ State state;
           delay(100);
 
           #if DEBUG
-            char colorValuesWhite[128];
-            snprintf(colorValuesWhite, sizeof(colorValuesWhite), "- Max range colors: rgb(%i, %i, %i)", colorRange.redMax, colorRange.greenMax, colorRange.blueMax);
-            Serial.println(colorValuesWhite);
+            char colorValuesBlack[128];
+            snprintf(colorValuesBlack, sizeof(colorValuesBlack), "-- Max range colors: rgb(%i, %i, %i)", colorRange.redMax, colorRange.greenMax, colorRange.blueMax);
+            Serial.println(colorValuesBlack);
           #endif
 
           Serial.println("- RGB sensor calibration COMPLETE!");
@@ -433,7 +433,7 @@ State state;
 
         #if DEBUG
           char colorValues[128];
-          snprintf(colorValues, sizeof(colorValues), "- Detected colors: rgb(%i, %i, %i)", color.red, color.green, color.blue);
+          snprintf(colorValues, sizeof(colorValues), "--- Detected colors: rgb(%i, %i, %i)", color.red, color.green, color.blue);
           Serial.println(colorValues);
           delay(500);
         #endif
