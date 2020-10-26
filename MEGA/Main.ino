@@ -13,8 +13,8 @@
 #define MAX_COMMANDS 100
 #define BAUD_RATE 9600
 
-#define BT_RX_PIN 16
-#define BT_TX_PIN 17
+#define BT_RX_PIN 46
+#define BT_TX_PIN 48
 
 #define MOTOR_DOOR_PIN 8
 #define MOTOR_DRIVER_PIN 9
