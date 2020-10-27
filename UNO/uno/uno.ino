@@ -24,10 +24,10 @@
   LCM1602 Display with I2C module
 */
 // Button pins
-#define bpin_estop 1
-#define bpin_changedir 2
-#define bpin_startstop 3
-#define bpin_doors 4
+#define bpin_estop 3
+#define bpin_changedir 4
+#define bpin_startstop 2
+#define bpin_doors 5
 
 const String bname_estop = "Emergency Stop";
 const String bname_changedir = "Change Direction";
@@ -45,7 +45,7 @@ Button b_doors(bpin_doors, 'd', bname_doors);
 int minusOne[8] = { 0b00010, 0b00110, 0b11010, 0b00010, 0b00111, 0b00000, 0b00000, 0b00000 };
 int doubleAngledBrackets[8] = { 0b00000, 0b00000, 0b10100, 0b01010, 0b00101, 0b01010, 0b10100, 0b00000 };
 int upArrow[8] = { 0b00100, 0b01110, 0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100 };
-int downArrow[8] ={ 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111, 0b01110, 0b00100 };
+int downArrow[8] = { 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111, 0b01110, 0b00100 };
 // int myHeart[8] = {0, 10, 31, 31, 14, 4, 0, 0};
 
 // ***** GLOBAL VARIABLES AND CONFIGS *****
@@ -104,13 +104,47 @@ void loop() {
     if (NL) {
       NL = false;
     }
-//    Serial.print(c);
+    //    Serial.print(c);
     if (c == 10) {
       NL = true;
     }
   }
+  listenForButtonClicks();
 }
 
+String btnPressed = "";
+void listenForButtonClicks() {
+  if (b_estop.isPressed()) {
+
+    resetLeftScrollIndexes();
+    // send b_estop.getCommand() command to mega
+    Serial.println(b_estop.getButtonName());
+    btnPressed = b_estop.getButtonName();
+  }
+  if (b_changedir.isPressed()) {
+
+    resetLeftScrollIndexes();
+    // send b_changedir.getCommand() command to mega
+    Serial.println(b_changedir.getButtonName());
+    btnPressed = b_changedir.getButtonName();
+  }
+  if (b_startstop.isPressed()) {
+
+    resetLeftScrollIndexes();
+    // send b_startstop.getCommand() command to mega
+    Serial.println(b_startstop.getButtonName());
+    btnPressed = b_startstop.getButtonName();
+  }
+  if (b_doors.isPressed()) {
+    
+    resetLeftScrollIndexes();
+    // send b_doors.getCommand() command to mega
+    Serial.println(b_doors.getButtonName());
+    btnPressed = b_doors.getButtonName();
+  }
+lcd.setCursor(0, 0);
+  lcd.print(scrollLeft(btnPressed));
+}
 void considerReadingInput() {
   String input = "";
   while (BTserial.available()) {
@@ -125,9 +159,9 @@ void considerReadingInput() {
 
 
 void setup_lcd() {
-  // Check and connect to LCD. 
+  // Check and connect to LCD.
   int error;
-  
+
   Serial.println("lcd...");
 
   // Wait on Serial to be available on Uno
@@ -152,15 +186,15 @@ void setup_lcd() {
   lcd.createChar(2, doubleAngledBrackets);
   lcd.createChar(3, upArrow);
   lcd.createChar(4, downArrow);
-  
-// Initalise buttons- TODO remove if constructor works
-//  b_estop.begin();
-//  b_changedir.begin();
-//  b_startstop.begin();
-//  b_doors.begin();
+
+  // Initalise buttons- TODO remove if constructor works
+  //  b_estop.begin();
+  //  b_changedir.begin();
+  //  b_startstop.begin();
+  //  b_doors.begin();
 
   // Set configs for lcd
-  lcd.setBacklight(255); // Set LCD's brightness 
+  lcd.setBacklight(255); // Set LCD's brightness
 
   // Show start up message
   lcd.setCursor(0, 0);
@@ -179,8 +213,8 @@ void setup_lcd() {
 void loop_lcd() {
   // First line
   lcd.setCursor(0, 0);
-  lcd.print(scrollLeft("Demo: " + String("\2") + "~ Scrolling single row only ~" + String("\3\4\2") + "  The quick brown fox jumps over the lazy dog"));
-  
+  //  lcd.print(scrollLeft("Demo: " + String("\2") + "~ Scrolling single row only ~" + String("\3\4\2") + "  The quick brown fox jumps over the lazy dog"));
+  //  displayButtonPressed();
   // Second line
   displayVelocity(trainStatus.speed.toDouble());
   displayUnit();
@@ -247,7 +281,7 @@ void displayDirection(String dir) {
 
 String scrollLeft(String text) {
   String str;
-  String strPadded = "                " + text + "                "; //16 whitespace paddings + text + 16 whitespace paddings
+  String strPadded = "              " + text + "                "; //16 whitespace paddings + text + 16 whitespace paddings
 
   // Extract whatever is needed for display and increment startIndex and endIndex by one
   str = strPadded.substring(ls_startIndex++, ls_endIndex++);
