@@ -112,39 +112,49 @@ void loop() {
   listenForButtonClicks();
 }
 
-String btnPressed = "";
+Button btnPressed = Button(-1, "_", "");
+char lastCommand;
+bool isButtonPressed = false;
 void listenForButtonClicks() {
-  if (b_estop.isPressed()) {
-
+  if (b_doors.isPressed()) {
     resetLeftScrollIndexes();
-    // send b_estop.getCommand() command to mega
-    Serial.println(b_estop.getButtonName());
-    btnPressed = b_estop.getButtonName();
+    Serial.println(b_doors.getButtonName());
+    btnPressed = b_doors;
+    isButtonPressed = true;
   }
   if (b_changedir.isPressed()) {
-
     resetLeftScrollIndexes();
-    // send b_changedir.getCommand() command to mega
     Serial.println(b_changedir.getButtonName());
-    btnPressed = b_changedir.getButtonName();
+    btnPressed = b_changedir;
+    isButtonPressed = true;
   }
   if (b_startstop.isPressed()) {
-
     resetLeftScrollIndexes();
-    // send b_startstop.getCommand() command to mega
     Serial.println(b_startstop.getButtonName());
-    btnPressed = b_startstop.getButtonName();
+    btnPressed = b_startstop;
+    isButtonPressed = true;
   }
-  if (b_doors.isPressed()) {
-    
+  if (b_estop.isPressed()) {
     resetLeftScrollIndexes();
-    // send b_doors.getCommand() command to mega
-    Serial.println(b_doors.getButtonName());
-    btnPressed = b_doors.getButtonName();
+    Serial.println(b_estop.getButtonName());
+    btnPressed = b_estop;
+    isButtonPressed = true;
   }
-lcd.setCursor(0, 0);
-  lcd.print(scrollLeft(btnPressed));
+  lcd.setCursor(0, 0);
+  // send button.getCommand() to mega
+  sendCommand(btnPressed.getCommand());
+  lcd.print(scrollLeft(btnPressed.getButtonName()));
+  isButtonPressed = false;
+
 }
+
+void sendCommand(char command) {
+  if (isButtonPressed) {
+    Serial.println(command);
+    BTserial.print(command);
+  }
+}
+
 void considerReadingInput() {
   String input = "";
   while (BTserial.available()) {
@@ -187,12 +197,6 @@ void setup_lcd() {
   lcd.createChar(3, upArrow);
   lcd.createChar(4, downArrow);
 
-  // Initalise buttons- TODO remove if constructor works
-  //  b_estop.begin();
-  //  b_changedir.begin();
-  //  b_startstop.begin();
-  //  b_doors.begin();
-
   // Set configs for lcd
   lcd.setBacklight(255); // Set LCD's brightness
 
@@ -204,9 +208,9 @@ void setup_lcd() {
   for (int i = 11; i < 16; i++) {
     lcd.setCursor(i, 0);
     lcd.print(".");
-    delay(500);
+    delay(200);
   }
-  delay(500);
+  delay(400);
   lcd.clear();
 }
 
@@ -239,18 +243,6 @@ String randomiseButtonPressed() {
 float randomiseFloat() {
   // Train should be travelling between 0.1 - 0.4 ms-1
   return (float)rand() / 1000;
-}
-
-String buttonToString(ControlBoxButton btn) {
-  if (btn == estop) {
-    return "Emergency Stop";
-  } else if (btn == changedir) {
-    return "Change Direction";
-  } else if (btn == toggledoors) {
-    return "Opening/Closing Doors";
-  } else {
-    return "Start/Stop Train";
-  }
 }
 
 // **** print to LCD funcs ****
