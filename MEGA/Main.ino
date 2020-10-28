@@ -21,6 +21,7 @@
 #define MOTOR_DRIVER_MAX 1800
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
+#define EMERGENCY_PIN 13
 
 #define RGB_COLOROUT 8
 #define RGB_S0 4
@@ -187,6 +188,13 @@ State state;
         }
         ::state.trainSpeedState = state;
       }
+
+      /*
+        Trigger relay to emergency stop
+      */
+      void emergencyStop() {
+        digitalWrite(EMERGENCY_PIN, HIGH);
+      }
   };
   Motors motors;
 #endif
@@ -286,6 +294,8 @@ void setup() {
   #endif
 
   #if ENABLE_MOTORS
+    // Init relay for emergency break
+    pinMode(EMERGENCY_PIN, OUTPUT);
     // Init DC Motor for drive
     pinMode(MOTOR_DRIVER_PIN, OUTPUT);
     motors.trainMotor.attach(MOTOR_DRIVER_PIN, MOTOR_DRIVER_MIN, MOTOR_DRIVER_MAX);
@@ -367,6 +377,8 @@ void loop() {
       case 'm':
         #if ENABLE_MOTORS
           motors.setTrainSpeedState(1);
+          // Disable emergency stop break
+          digitalWrite(EMERGENCY_PIN, LOW);
         #endif
         #if DEBUG
           Serial.println(" - COMMAND: Start/Move train");
