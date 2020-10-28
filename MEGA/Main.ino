@@ -5,21 +5,20 @@
 */
 
 #define DEBUG 1
-#define ENABLE_SENSORS 1
-#define ENABLE_MOTORS 0
+#define ENABLE_SENSORS 0
+#define ENABLE_MOTORS 1
 #define ENABLE_COMMS 1
-#define ENABLE_DOORS 1
 
 #define MAX_COMMANDS 100
 #define BAUD_RATE 9600
 
-#define BT_RX_PIN 16
-#define BT_TX_PIN 17
+#define BT_RX_PIN 17
+#define BT_TX_PIN 16
 
 #define MOTOR_DOOR_PIN 8
 #define MOTOR_DRIVER_PIN 9
-#define MOTOR_DRIVER_MIN 600
-#define MOTOR_DRIVER_MAX 2400
+#define MOTOR_DRIVER_MIN 1200
+#define MOTOR_DRIVER_MAX 1800
 #define ENCODER_PIN_A 2
 #define ENCODER_PIN_B 3
 
@@ -60,10 +59,6 @@ class State {
     */
     float trainSpeed = 0;
 
-    #if ENABLE_DOORS
-      int doorsOpen = 0;
-    #endif
-
     /*
       Queue of commands received from Sensors or Comms
     */
@@ -101,11 +96,11 @@ class State {
 State state;
 
 #if ENABLE_COMMS
-  #include <AltSoftSerial.h>
-
+  /* 
+    Bluetooth Module: HM-10
+  */
   class Comms {
     public:
-      AltSoftSerial BTSerial;
 
       /*
         Send data over Comms link; data is sent in this format: 
@@ -113,20 +108,8 @@ State state;
       */
       void sendData(char type, char data) {
         char message[10];
-        snprintf(message, sizeof(message), "%s:%s_%s", ::state.trainStatus, type, data);
-        #if DEBUG
-          Serial.write("<");
-          delay(100);
-          Serial.write(message);
-          delay(100);
-          Serial.write(">");
-        #else
-          BTSerial.write("<");
-          delay(100);
-          BTSerial.write(message);
-          delay(100);
-          BTSerial.write(">");
-        #endif
+        snprintf(message, sizeof(message), "<%s:%s_%s>", ::state.trainStatus, type, data);
+        Serial2.write(message);
       }
 
       /*
@@ -135,34 +118,19 @@ State state;
           m = Start train
           s = Stop train
           c = Change train direction
-          d = Open/close doors
       */
       char receivedCommand() {
         char response;
         char command = 'n';
-        #if DEBUG
-          while (Serial.available()) {
-            response = Serial.read();
-            if (response != '<' && response != '>') {
-              command = response;
-              delay(100);
-            }
-            if (response == '>') {
-              break;
-            }
+        while (Serial2.available()) {
+          response = Serial2.read();
+          if (response != '<' && response != '>') {
+            command = response;
           }
-        #else
-          while (BTSerial.available()) {
-            response = BTSerial.read();
-            if (response != '<' && response != '>') {
-              command = response;
-              delay(100);
-            }
-            if (response == '>') {
-              break;
-            }
+          if (response == '>') {
+            break;
           }
-        #endif
+        }
         return command;
       }
   };
@@ -171,8 +139,6 @@ State state;
 
 #if ENABLE_MOTORS
   #include <Servo.h>
-  #include <Encoder.h>
-  #include <PID_v1.h>
 
   /* 
     Motor Driver: REV Robotics SPARK Motor Controller
@@ -187,44 +153,12 @@ State state;
       Servo trainMotor;
 
       /*
-        Encoder built-into DC motor to calculate velocity
-      */
-      Encoder trainEncoder = Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
-      volatile unsigned long trainEncoderCount, trainEncoderCountOld, trainEncoderCountNew = 0;
- 
-      /*
-        Create PID instance to maintain speed (kinda like cruise-control)
-      */
-      double kp = 0, ki = 10, kd = 0, input = 0, output = 0, setpoint = 0;
-      PID trainPID = PID(&input, &output, &setpoint, kp, ki, kd, DIRECT);
-
-      #if ENABLE_DOORS
-        /*
-          Servo which controls train doors movement
-        */
-        Servo doorServo;
-      #endif
-
-      /*
         Set train into provided speed setting:
           0 = No movement (stopped)
           1 = Slow speed
           2 = Normal speed
       */
       void setTrainSpeedState(int state) {
-        int startMicroseconds = 1500;
-        
-        if (::state.trainSpeedState == 1) {
-          startMicroseconds = ::state.trainDirection
-            ? 1500 + ((MOTOR_DRIVER_MAX - 1500) / 2) 
-            : MOTOR_DRIVER_MIN + ((1500 - MOTOR_DRIVER_MIN) / 2);
-
-        } else if (::state.trainSpeedState == 2) {
-          startMicroseconds = ::state.trainDirection 
-            ? MOTOR_DRIVER_MAX 
-            : MOTOR_DRIVER_MIN;
-        }
-
         switch (state) {
           case 0:
             trainMotor.writeMicroseconds(1500);
@@ -235,8 +169,8 @@ State state;
 
           case 1:
             trainMotor.writeMicroseconds(::state.trainDirection
-              ? 1500 + ((MOTOR_DRIVER_MAX - 1500) / 2) 
-              : MOTOR_DRIVER_MIN + ((1500 - MOTOR_DRIVER_MIN) / 2));
+              ? (1500 + ((MOTOR_DRIVER_MAX - 1500) / 2)) 
+              : (MOTOR_DRIVER_MIN + ((1500 - MOTOR_DRIVER_MIN) / 2)));
             #if DEBUG
               Serial.println(" - SET TRAIN SPEED: Slow");
             #endif
@@ -253,28 +187,6 @@ State state;
         }
         ::state.trainSpeedState = state;
       }
-
-      void trainEncoderCountEvent() {
-        trainEncoderCount += digitalRead(ENCODER_PIN_B) == HIGH ? 1 : -1;
-      }
-
-      #if ENABLE_DOORS
-        void toggleTrainDoors() {
-          if (::state.doorsOpen == 0) {
-            for (int i = 0; i <= 95; i += 10) {
-              doorServo.write(i);
-              delay(250);
-            }
-            ::state.doorsOpen = 1;
-          } else if (::state.doorsOpen == 1) {
-            for (int i = 190; i >= 95; i -= 10) {
-              doorServo.write(i);
-              delay(250);
-            }
-            ::state.doorsOpen = 0;
-          }
-        }
-      #endif
   };
   Motors motors;
 #endif
@@ -298,84 +210,6 @@ State state;
       Color color;
 
       /*
-        Frequency of colors detected from sensed object by RGB/Color sensor
-      */
-      typedef struct Frequency {
-        int red = 0;
-        int green = 0;
-        int blue = 0;
-      } Frequency;
-      Frequency colorFrequency;
-
-      /*
-        Minimum & maximum of colors detected during calibration by RGB/Color sensor
-      */
-      typedef struct Range {
-        int redMin;
-        int redMax;
-        int greenMin;
-        int greenMax;
-        int blueMin;
-        int blueMax;
-      } Range;
-      Range colorRange;
-
-      #if DEBUG
-        void calibrate() {
-          Serial.print("- Begin calibration for RGB sensor...");
-
-          // Aiming at WHITE color
-          Serial.println("- RGB sensor calibrating - Min range...");
-          Serial.println("- Begin calibrating color: WHITE");
-
-          // Setting calibration values - Min range
-          digitalWrite(13, HIGH);
-          delay(2000);
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, LOW);
-          colorRange.redMin = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          digitalWrite(RGB_S2, HIGH);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.greenMin = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.blueMin = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-
-          // Aiming at BLACK color
-          Serial.println("- RGB sensor calibrating - Max range...");
-          Serial.println("- Begin calibrating color: BLACK");
-          digitalWrite(13, LOW);
-          delay(2000);
-
-          // Setting calibration values - Max range
-          digitalWrite(13, LOW);
-          delay(2000);
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, LOW);
-          colorRange.redMax = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-          digitalWrite(RGB_S2, HIGH);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.greenMax = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-          digitalWrite(RGB_S2, LOW);
-          digitalWrite(RGB_S3, HIGH);
-          colorRange.blueMax = pulseIn(RGB_COLOROUT, LOW);
-          delay(100);
-          Serial.println("- RGB sensor calibration COMPLETE!");
-          digitalWrite(13, LOW);
-
-          // Calibrate Accelerometer sensor
-          Serial.print("- Begin calibration for Accelerometer sensor...");
-        }
-      #endif
-
-      /*
         Determine which color is detected by RGB/Color sensor; returns:
           r = Red 
           g = Green
@@ -384,52 +218,39 @@ State state;
           n = None
       */
       char detectedColor() {
-        // Sensing Red Color
+        // Detect RED
         digitalWrite(RGB_S2, LOW);
         digitalWrite(RGB_S3, LOW);
-        colorFrequency.red = pulseIn(RGB_COLOROUT, LOW);
-        color.red = map(colorFrequency.red, colorRange.redMin, colorRange.redMax, 255, 0);
-        delay(100);
+        color.red = pulseIn(RGB_COLOROUT, LOW);
 
-        // Sensing Green Color
-        digitalWrite(RGB_S2,HIGH);
-        digitalWrite(RGB_S3,HIGH);
-        colorFrequency.green = pulseIn(RGB_COLOROUT, LOW);
-        color.green = map(colorFrequency.green, colorRange.greenMin, colorRange.greenMax, 255, 0);
-        delay(100);
+        // Detect GREEN
+        digitalWrite(RGB_S2, HIGH);
+        digitalWrite(RGB_S3, HIGH);
+        color.green = pulseIn(RGB_COLOROUT, LOW);
 
-        // Sensing Blue Color
-        digitalWrite(RGB_S2,LOW);
-        digitalWrite(RGB_S3,HIGH);
-        colorFrequency.blue = pulseIn(RGB_COLOROUT, LOW);
-        color.blue = map(colorFrequency.blue, colorRange.blueMin, colorRange.blueMax, 255, 0);
-        delay(100);
+        // Detect BLUE
+        digitalWrite(RGB_S2, LOW);
+        digitalWrite(RGB_S3, HIGH);
+        color.blue = pulseIn(RGB_COLOROUT, LOW);
 
-        // Limit the range for each color
-        color.red = constrain(color.red, 0, 255);
-        color.green = constrain(color.green, 0, 255);
-        color.blue = constrain(color.blue, 0, 255);
-
-        // Identifying the brightest color
-        int maxVal = max(color.red, color.blue);
-        maxVal = max(maxVal, color.green);
-        
-        // Map new color values
-        color.red = constrain(map(color.red, 0, maxVal, 0, 255), 0, 255);
-        color.green = constrain(map(color.green, 0, maxVal, 0, 255), 0, 255);
-        color.blue = constrain(map(color.blue, 0, maxVal, 0, 255), 0, 255);
+        #if DEBUG
+          char colorValues[128];
+          snprintf(colorValues, sizeof(colorValues), "--- Detected colors: rgb(%i, %i, %i)", color.red, color.green, color.blue);
+          Serial.println(colorValues);
+        #endif
 
         // Determine which color is most likely detected
-        if (color.red > 250 && color.green < 200 && color.blue < 200) {
+        if (color.red > 12 && color.red < 30 && color.green > 40 && color.green < 70 && color.blue > 33 && color.blue < 70) {
           return 'r'; // Red
-        } else if (color.red < 200 && color.green > 250 && color.blue < 200) {
+        } else if (color.red > 50 && color.red < 95 && color.green > 35 && color.green < 70 && color.blue > 45 && color.blue < 85) {
           return 'g'; // Green
-        } else if (color.red < 200 && color.blue > 250) {
+        } else if (color.red > 65 && color.red < 125 && color.green > 65 && color.green < 115 && color.blue > 32 && color.blue < 65) {
           return 'b'; // Blue
-        } else if (color.red > 200 && color.green > 200 && color.blue < 100) {
+        } else if (color.red > 10 && color.red < 20 && color.green > 10 && color.green < 25 && color.blue > 20 && color.blue < 38) {
           return 'y'; // Yellow
         }
-        return 'n'; // No color
+
+        return 'n'; // None
       }
 
       /*
@@ -448,9 +269,9 @@ void setup() {
   Serial.begin(BAUD_RATE);
   Serial.println("Welcome to ENGG-METRO!");
 
-  #if ENABLE_COMMS && !DEBUG
+  #if ENABLE_COMMS
     // Init Bluetooth Comms link
-    comms.BTSerial.begin(BAUD_RATE);
+    Serial2.begin(BAUD_RATE);
   #endif
 
   #if ENABLE_SENSORS
@@ -460,46 +281,20 @@ void setup() {
     pinMode(RGB_S2, OUTPUT);
     pinMode(RGB_S3, OUTPUT);
     digitalWrite(RGB_S0, HIGH);
-    digitalWrite(RGB_S1, LOW);
+    digitalWrite(RGB_S1, HIGH);
     pinMode(RGB_COLOROUT, INPUT);
   #endif
 
   #if ENABLE_MOTORS
-
-    #if ENABLE_DOORS
-      // Init Servo for doors
-      pinMode(MOTOR_DOOR_PIN, OUTPUT);
-      motors.doorServo.attach(MOTOR_DOOR_PIN);
-    #endif
-
     // Init DC Motor for drive
     pinMode(MOTOR_DRIVER_PIN, OUTPUT);
     motors.trainMotor.attach(MOTOR_DRIVER_PIN, MOTOR_DRIVER_MIN, MOTOR_DRIVER_MAX);
-
-    // Init PID
-    motors.trainPID.SetMode(AUTOMATIC);
-    motors.trainPID.SetTunings(motors.kp, motors.ki, motors.kd);
-
-    // Init Encoder
-    attachInterrupt(0, trainEncoderCountEvent, CHANGE);
   #endif
 
   #if DEBUG
     Serial.println(" - Entered DEBUG mode");
-    #if ENABLE_SENSORS
-      sensors.calibrate();
-    #endif
   #endif
 }
-
-#if ENABLE_MOTORS
-  /*
-    Train encoder event for interrupt call
-  */
-  void trainEncoderCountEvent() {
-    motors.trainEncoderCountEvent();
-  }
-#endif
 
 void loop() {
   #if ENABLE_SENSORS
@@ -535,7 +330,7 @@ void loop() {
         #if ENABLE_MOTORS
           if (state.trainSpeedState == 2) {
             motors.setTrainSpeedState(1);
-          } else if (state.trainSpeedState == 1) {
+          } else if(state.trainSpeedState == 1) {
             motors.setTrainSpeedState(2);
           }
         #endif
@@ -577,23 +372,6 @@ void loop() {
           Serial.println(" - COMMAND: Start/Move train");
         #endif
         break;
-
-      // Comms: Open/Close doors
-      case 'd':
-        #if ENABLE_MOTORS && ENABLE_DOORS
-          motors.toggleTrainDoors();
-        #endif
-        #if DEBUG
-          Serial.println(" - COMMAND: Open/Close doors");
-        #endif
-        break;
     }
   }
-
-  #if ENABLE_MOTORS
-    motors.input = motors.trainEncoderCount;
-    motors.trainPID.Compute();
-    // delay(1000);
-    // comms.sendData('s', state.trainSpeed);
-  #endif
 }
