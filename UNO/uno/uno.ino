@@ -1,3 +1,7 @@
+//
+//  Control Box - Arduino Uno (Train 2)
+//  Team: T1_C5
+//  Members: Hong Lim, Mingze Song
 //  SerialIn_SerialOut_HM-10_01
 //
 //  Uses hardware serial to talk to the host computer and AltSoftSerial for communication with the bluetooth module
@@ -17,18 +21,16 @@
 #include "TrainStatus.h"
 #include <LiquidCrystal_PCF8574.h>
 #include <Wire.h>
-#include "ControlBoxButton.h"
 #include "Button.h"
 
-/*
-  LCM1602 Display with I2C module
-*/
-// Button pins
+// ***** GLOBAL VARIABLES AND CONFIGS *****
+// **** button pins ****
 #define bpin_estop 3
 #define bpin_changedir 4
 #define bpin_startstop 2
 #define bpin_doors 5
 
+// **** button names ****
 const String bname_estop = "Emergency Stop";
 const String bname_changedir = "Change Direction";
 const String bname_startstop = "Start/Stop Train";
@@ -39,23 +41,18 @@ Button b_estop(bpin_estop, 'x',  bname_estop);
 Button b_changedir(bpin_changedir, 'c', bname_changedir);
 Button b_startstop(bpin_startstop, 's', bname_startstop);
 Button b_doors(bpin_doors, 'd', bname_doors);
-//
 
 // ***** CUSTOM CHARACTER *****
 int minusOne[8] = { 0b00010, 0b00110, 0b11010, 0b00010, 0b00111, 0b00000, 0b00000, 0b00000 };
 int doubleAngledBrackets[8] = { 0b00000, 0b00000, 0b10100, 0b01010, 0b00101, 0b01010, 0b10100, 0b00000 };
 int upArrow[8] = { 0b00100, 0b01110, 0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100 };
 int downArrow[8] = { 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111, 0b01110, 0b00100 };
-// int myHeart[8] = {0, 10, 31, 31, 14, 4, 0, 0};
+int myHeart[8] = {0, 10, 31, 31, 14, 4, 0, 0};
 
-// ***** GLOBAL VARIABLES AND CONFIGS *****
 // **** velocity display configs ****
 const int v_lenIncDecimalPoint = 5;
 const int v_numDigsAfterDecimal = 3;
 char v_outStr[8];
-
-// **** direction ****
-//traindirection dir = unknown;
 
 // **** scrolling text variables ****
 int ls_startIndex = 16;
@@ -64,13 +61,10 @@ int rs_endIndex  = -1;
 int rs_startIndex = -1;
 
 // **** LCD ****
-LiquidCrystal_PCF8574 lcd(0x27); // Set the lcd address to 0x27 for a 16 chars and 2 line display
-// Try I2C address of 0x3f or 0x20 if 0x27 does not work
-
+LiquidCrystal_PCF8574 lcd(0x27); /
 
 AltSoftSerial BTserial;
 // https://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
-
 
 boolean NL = true;
 Parse parser = Parse();
@@ -113,7 +107,6 @@ void loop() {
 }
 
 Button btnPressed = Button(-1, "_", "");
-char lastCommand;
 bool isButtonPressed = false;
 void listenForButtonClicks() {
   if (b_doors.isPressed()) {
@@ -159,7 +152,7 @@ void considerReadingInput() {
   String input = "";
   while (BTserial.available()) {
     input = input + (char) BTserial.read();
-    delay(100);
+    delay(70);
   }
 
   if (input.length() > 0) {
@@ -167,13 +160,11 @@ void considerReadingInput() {
   }
 }
 
-
 void setup_lcd() {
   // Check and connect to LCD.
   int error;
 
   Serial.println("lcd...");
-
   // Wait on Serial to be available on Uno
   while (!Serial);
 
@@ -196,6 +187,7 @@ void setup_lcd() {
   lcd.createChar(2, doubleAngledBrackets);
   lcd.createChar(3, upArrow);
   lcd.createChar(4, downArrow);
+  lcd.createChar(5, myHeart);
 
   // Set configs for lcd
   lcd.setBacklight(255); // Set LCD's brightness
@@ -208,9 +200,7 @@ void setup_lcd() {
   for (int i = 11; i < 16; i++) {
     lcd.setCursor(i, 0);
     lcd.print(".");
-    delay(200);
   }
-  delay(400);
   lcd.clear();
 }
 
@@ -218,37 +208,11 @@ void loop_lcd() {
   // First line
   lcd.setCursor(0, 0);
   //  lcd.print(scrollLeft("Demo: " + String("\2") + "~ Scrolling single row only ~" + String("\3\4\2") + "  The quick brown fox jumps over the lazy dog"));
-  //  displayButtonPressed();
   // Second line
   displayVelocity(trainStatus.speed.toDouble());
   displayUnit();
   displayDirection(trainStatus.dir);
-  delay(500);
-}
-
-String randomiseButtonPressed() {
-  int i = rand() % 4;
-
-  if (i < 0) {
-    return b_estop.getButtonName();
-  } else if (i < 1) {
-    return b_changedir.getButtonName();
-  } else if (i < 2) {
-    return b_startstop.getButtonName();
-  } else {
-    return b_doors.getButtonName();
-  }
-}
-
-float randomiseFloat() {
-  // Train should be travelling between 0.1 - 0.4 ms-1
-  return (float)rand() / 1000;
-}
-
-// **** print to LCD funcs ****
-void displayButtonPressed() {
-  lcd.setCursor(0, 0); // First line
-  lcd.print(randomiseButtonPressed());
+  delay(300);
 }
 
 void displayVelocity(double speed) {
@@ -261,9 +225,10 @@ void displayVelocity(double speed) {
 void displayUnit() {
   // Print unit "m/s" or "ms-1" custom char
   lcd.setCursor(7, 1);
-  lcd.print(" ms");
-  lcd.setCursor(10, 1);
+  lcd.print("ms");
+  lcd.setCursor(9, 1);
   lcd.write(byte(1)); // Write minusOne character to lcd
+  lcd.write(byte(5));
 }
 
 void displayDirection(String dir) {
@@ -273,7 +238,7 @@ void displayDirection(String dir) {
 
 String scrollLeft(String text) {
   String str;
-  String strPadded = "              " + text + "                "; //16 whitespace paddings + text + 16 whitespace paddings
+  String strPadded = "              " + text + "               "; //16 whitespace paddings + text + 16 whitespace paddings
 
   // Extract whatever is needed for display and increment startIndex and endIndex by one
   str = strPadded.substring(ls_startIndex++, ls_endIndex++);
@@ -289,23 +254,4 @@ String scrollLeft(String text) {
 void resetLeftScrollIndexes() {
   ls_startIndex = 16;
   ls_endIndex = 0;
-}
-
-String scrollRight(String text) {
-  String str;
-  String strPadded = "                " + text + "                "; //16 whitespace paddings + text + 16 whitespace paddings
-  // When index is out of bound, reset indexes to default positions
-  if (rs_endIndex  < 1) {
-    rs_endIndex  = strPadded.length();
-    rs_startIndex = rs_endIndex  - 16;
-  }
-  // Extract whatever is needed for display and increment startIndex and endIndex by one
-  str = strPadded.substring(rs_startIndex--, rs_endIndex--);
-
-  return str;
-}
-
-void resetRightScrollIndexes() {
-  rs_endIndex  = -1;
-  rs_startIndex = -1;
 }
