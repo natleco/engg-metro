@@ -61,7 +61,7 @@ int rs_endIndex  = -1;
 int rs_startIndex = -1;
 
 // **** LCD ****
-LiquidCrystal_PCF8574 lcd(0x27); /
+LiquidCrystal_PCF8574 lcd(0x27);
 
 AltSoftSerial BTserial;
 // https://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
@@ -144,7 +144,9 @@ void listenForButtonClicks() {
 void sendCommand(char command) {
   if (isButtonPressed) {
     Serial.println(command);
+    BTserial.print('<');
     BTserial.print(command);
+    BTserial.print('>');
   }
 }
 
