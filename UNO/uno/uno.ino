@@ -15,6 +15,7 @@
 #include <AltSoftSerial.h>
 #include "Parse.h"
 #include "TrainStatus.h"
+<<<<<<< HEAD
 #include <LiquidCrystal_PCF8574.h>
 #include <Wire.h>
 #include "ControlBoxButton.h"
@@ -63,6 +64,8 @@ LiquidCrystal_PCF8574 lcd(0x27); // Set the lcd address to 0x27 for a 16 chars a
 // Try I2C address of 0x3f or 0x20 if 0x27 does not work
 
 
+=======
+>>>>>>> 81a90f3bda1a86b2de71b313a62eecd28e23cb5b
 AltSoftSerial BTserial;
 // https://www.pjrc.com/teensy/td_libs_AltSoftSerial.html
 
@@ -76,11 +79,17 @@ void setup() {
   Serial.begin(9600);
   BTserial.begin(9600);
   Serial.println("BTserial started at 9600");
+<<<<<<< HEAD
   setup_lcd();
 }
 
 void loop() {
   loop_lcd();
+=======
+}
+
+void loop() {
+>>>>>>> 81a90f3bda1a86b2de71b313a62eecd28e23cb5b
   considerReadingInput();
   if (Serial.available())
   {
@@ -116,6 +125,7 @@ void considerReadingInput() {
     trainStatus = parser.parse(input);
   }
 }
+<<<<<<< HEAD
 
 
 void setup_lcd() {
@@ -281,3 +291,5 @@ void resetRightScrollIndexes() {
   rs_endIndex  = -1;
   rs_startIndex = -1;
 }
+=======
+>>>>>>> 81a90f3bda1a86b2de71b313a62eecd28e23cb5b
